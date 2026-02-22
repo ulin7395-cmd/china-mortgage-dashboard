@@ -116,13 +116,37 @@ if form_data:
     prepayment_type = form_data.get("prepayment_type")
     amount_commercial = form_data.get("amount_commercial")
     amount_provident = form_data.get("amount_provident")
+    prepayment_date = form_data["prepayment_date"]
 
     valid, msg = validate_prepayment(amount, remaining_principal, method)
     if not valid:
         st.error(msg)
         st.stop()
 
+    # 根据用户选择的日期找到生效期数
+    schedule["due_date_dt"] = pd.to_datetime(schedule["due_date"])
+    eff_rows = schedule[schedule["due_date_dt"] >= pd.Timestamp(prepayment_date)]
+    if eff_rows.empty:
+        st.error("提前还款日期超出还款计划范围。")
+        st.stop()
+
+    prepayment_period = int(eff_rows.iloc[0]["period"])
+
     st.subheader("模拟结果")
+
+    # 根据 prepayment_period 重新计算当前状态
+    prepay_row = schedule[schedule["period"] == prepayment_period]
+    if prepay_row.empty:
+        prepay_row = unpaid.iloc[0:1]
+    else:
+        prepay_row = prepay_row.iloc[0:1]
+
+    calc_remaining_principal = float(prepay_row.iloc[0]["remaining_principal"]) + float(prepay_row.iloc[0]["principal"])
+    calc_remaining_term = len(schedule) - prepayment_period + 1
+    calc_current_monthly = float(prepay_row.iloc[0]["monthly_payment"])
+    calc_annual_rate = float(prepay_row.iloc[0]["applied_rate"])
+
+    st.write(f"**提前还款日:** {prepayment_date} | **对应期数:** 第 {prepayment_period} 期 | **届时剩余本金:** {fmt_amount(calc_remaining_principal)}")
 
     if is_combined:
         # 组合贷只显示一种方式（根据选择的method）
@@ -140,29 +164,29 @@ if form_data:
         with col1:
             st.markdown("#### 缩短年限")
             new_term_s, new_monthly_s = calc_shorten_term(
-                remaining_principal, amount, annual_rate,
-                current_monthly, plan["repayment_method"],
+                calc_remaining_principal, amount, calc_annual_rate,
+                calc_current_monthly, plan["repayment_method"],
             )
             saved_s = calc_interest_saved(
-                remaining_principal, amount, annual_rate,
-                remaining_term, plan["repayment_method"], "shorten_term",
+                calc_remaining_principal, amount, calc_annual_rate,
+                calc_remaining_term, plan["repayment_method"], "shorten_term",
             )
-            st.metric("新剩余期数", fmt_months(new_term_s), delta=f"-{remaining_term - new_term_s}期")
-            st.metric("月供不变", fmt_amount(current_monthly))
+            st.metric("新剩余期数", fmt_months(new_term_s), delta=f"-{calc_remaining_term - new_term_s}期")
+            st.metric("月供不变", fmt_amount(calc_current_monthly))
             st.metric("节省利息", fmt_amount(saved_s))
 
         with col2:
             st.markdown("#### 减少月供")
             new_term_r, new_monthly_r = calc_reduce_payment(
-                remaining_principal, amount, annual_rate,
-                remaining_term, plan["repayment_method"],
+                calc_remaining_principal, amount, calc_annual_rate,
+                calc_remaining_term, plan["repayment_method"],
             )
             saved_r = calc_interest_saved(
-                remaining_principal, amount, annual_rate,
-                remaining_term, plan["repayment_method"], "reduce_payment",
+                calc_remaining_principal, amount, calc_annual_rate,
+                calc_remaining_term, plan["repayment_method"], "reduce_payment",
             )
             st.metric("期数不变", fmt_months(new_term_r))
-            st.metric("新月供", fmt_amount(new_monthly_r), delta=f"{new_monthly_r - current_monthly:,.2f} 元")
+            st.metric("新月供", fmt_amount(new_monthly_r), delta=f"{new_monthly_r - calc_current_monthly:,.2f} 元")
             st.metric("节省利息", fmt_amount(saved_r))
 
     st.divider()
@@ -176,15 +200,15 @@ if form_data:
         amount_c = amount_commercial or 0.0
         amount_p = amount_provident or 0.0
         new_schedule, prepay_info = apply_combined_prepayment(
-            plan_id, plan, schedule, current_period,
+            plan_id, plan, schedule, prepayment_period,
             prepayment_type, amount_c, amount_p, method,
             start_date, int(plan["repayment_day"]),
         )
     else:
         # 普通贷款提前还款
         new_schedule, prepay_info = apply_prepayment(
-            plan_id, schedule, current_period, amount, method,
-            annual_rate, plan["repayment_method"],
+            plan_id, schedule, prepayment_period, amount, method,
+            calc_annual_rate, plan["repayment_method"],
             start_date, int(plan["repayment_day"]),
         )
 
@@ -219,7 +243,7 @@ if form_data:
             "prepayment_id": generate_prepayment_id(),
             "plan_id": plan_id,
             "prepayment_date": form_data["prepayment_date"].strftime("%Y-%m-%d"),
-            "prepayment_period": current_period,
+            "prepayment_period": prepayment_period,
             "amount": amount,
             "method": method,
             **prepay_info,
