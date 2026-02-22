@@ -323,25 +323,35 @@ def apply_combined_prepayment(
         sch_p_result = sch_p_full.copy()
         info_p = {"interest_saved": 0, "new_monthly_payment": 0}
 
-    # 6. 合并两个计划
-    max_len = max(len(sch_c_result), len(sch_p_result))
+    # 6. 合并两个计划 - 按 period 对齐合并
+    # 创建 period 到数据的映射
+    c_by_period = {row["period"]: row for _, row in sch_c_result.iterrows()}
+    p_by_period = {row["period"]: row for _, row in sch_p_result.iterrows()}
 
-    # 对齐长度
-    def pad_schedule(sch, target_len):
-        if len(sch) >= target_len:
-            return sch.head(target_len).copy()
-        # 需要补充期数（实际应该不会发生）
-        return sch.copy()
+    all_periods = sorted(set(list(c_by_period.keys()) + list(p_by_period.keys())))
 
-    sch_c_aligned = pad_schedule(sch_c_result, max_len)
-    sch_p_aligned = pad_schedule(sch_p_result, max_len)
+    # 合并记录
+    combined_records = []
+    for period in all_periods:
+        c_row = c_by_period.get(period)
+        p_row = p_by_period.get(period)
 
-    # 合并
-    combined = sch_c_aligned.copy()
-    for col in ["monthly_payment", "principal", "interest",
-                "remaining_principal", "cumulative_principal", "cumulative_interest"]:
-        combined[col] = sch_c_aligned[col].values + sch_p_aligned[col].values
+        if c_row is not None and p_row is not None:
+            # 两部分都有数据，直接合并
+            record = c_row.copy()
+            for col in ["monthly_payment", "principal", "interest",
+                        "remaining_principal", "cumulative_principal", "cumulative_interest"]:
+                record[col] = c_row[col] + p_row[col]
+        elif c_row is not None:
+            # 只有商贷有数据（公积金已还清）
+            record = c_row.copy()
+        else:
+            # 只有公积金有数据（商贷已还清）
+            record = p_row.copy()
 
+        combined_records.append(record)
+
+    combined = pd.DataFrame(combined_records)
     combined["applied_rate"] = commercial_rate
     combined = combined.round(2)
     combined["plan_id"] = plan_id
