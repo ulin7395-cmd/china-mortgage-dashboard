@@ -147,8 +147,7 @@ def mark_period_paid(plan_id: str, period: int, pay_date: Optional[str] = None, 
         # 确保 paid_up_to_period 列存在
         if "paid_up_to_period" not in df.columns:
             df["paid_up_to_period"] = 0
-        current_paid = int(df.loc[mask, "paid_up_to_period"].iloc[0]) if pd.notna(df.loc[mask, "paid_up_to_period"].iloc[0]) else 0
-        df.loc[mask, "paid_up_to_period"] = max(current_paid, period)
+        df.loc[mask, "paid_up_to_period"] = period
         write_sheet(df, SHEET_LOAN_PLANS, filepath)
 
 

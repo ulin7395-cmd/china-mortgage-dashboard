@@ -72,25 +72,23 @@ st.divider()
 # 标记已还
 st.subheader("标记还款")
 paid_up_to = get_paid_up_to_period(plan_id)
-unpaid_periods = [p for p in range(paid_up_to + 1, total_periods + 1)]
+all_periods = list(range(0, total_periods + 1))  # 0 表示未还任何期
 
-if unpaid_periods:
-    col_a, col_b = st.columns([3, 1])
-    with col_a:
-        mark_up_to = st.selectbox(
-            "标记已还至第N期",
-            options=unpaid_periods,
-            index=0,
-        )
-    with col_b:
-        st.write("")
-        st.write("")
-        if st.button("确认标记", type="primary"):
-            mark_period_paid(plan_id, mark_up_to)
-            st.success(f"已标记至第 {mark_up_to} 期")
-            st.rerun()
-else:
-    st.success("所有期数均已还清！")
+col_a, col_b = st.columns([3, 1])
+with col_a:
+    default_idx = all_periods.index(paid_up_to) if paid_up_to in all_periods else 0
+    mark_up_to = st.selectbox(
+        "标记已还至第N期（0表示未还任何期）",
+        options=all_periods,
+        index=default_idx,
+    )
+with col_b:
+    st.write("")
+    st.write("")
+    if st.button("确认标记", type="primary"):
+        mark_period_paid(plan_id, mark_up_to)
+        st.success(f"已标记至第 {mark_up_to} 期")
+        st.rerun()
 
 st.divider()
 
