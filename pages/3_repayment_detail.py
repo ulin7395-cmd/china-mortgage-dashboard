@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 
-from data_manager.excel_handler import get_all_plans
+from data_manager.excel_handler import get_all_plans, mark_period_paid, get_paid_up_to_period
 from core.schedule_generator import get_plan_schedule
 from components.tables import render_repayment_table
 from components.charts import create_stacked_area, create_remaining_principal_line
@@ -66,6 +66,31 @@ remaining_schedule = schedule[~paid_mask]
 remaining_principal = float(remaining_schedule.iloc[0]["remaining_principal"] + remaining_schedule.iloc[0]["principal"]) if not remaining_schedule.empty else 0
 remaining_irr = calc_remaining_irr(remaining_principal, remaining_schedule)
 c8.metric("剩余年化率(IRR)", fmt_rate(remaining_irr))
+
+st.divider()
+
+# 标记已还
+st.subheader("标记还款")
+paid_up_to = get_paid_up_to_period(plan_id)
+unpaid_periods = [p for p in range(paid_up_to + 1, total_periods + 1)]
+
+if unpaid_periods:
+    col_a, col_b = st.columns([3, 1])
+    with col_a:
+        mark_up_to = st.selectbox(
+            "标记已还至第N期",
+            options=unpaid_periods,
+            index=0,
+        )
+    with col_b:
+        st.write("")
+        st.write("")
+        if st.button("确认标记", type="primary"):
+            mark_period_paid(plan_id, mark_up_to)
+            st.success(f"已标记至第 {mark_up_to} 期")
+            st.rerun()
+else:
+    st.success("所有期数均已还清！")
 
 st.divider()
 

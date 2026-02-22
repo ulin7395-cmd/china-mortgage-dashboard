@@ -138,6 +138,11 @@ def generate_plan_schedule_from_events(
                 applied_rate, repayment_method, start_date, repayment_day,
             )
 
+    # 标记已还期数
+    paid_up_to = int(plan.get("paid_up_to_period", 0))
+    if paid_up_to > 0:
+        schedule.loc[schedule["period"] <= paid_up_to, "is_paid"] = True
+
     return schedule
 
 

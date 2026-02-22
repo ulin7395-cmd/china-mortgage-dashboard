@@ -70,7 +70,7 @@ LOAN_PLANS_COLUMNS = [
     "plan_id", "plan_name", "loan_type", "total_amount",
     "commercial_amount", "provident_amount", "term_months",
     "repayment_method", "commercial_rate", "provident_rate",
-    "start_date", "repayment_day", "status", "notes",
+    "start_date", "repayment_day", "status", "notes", "paid_up_to_period",
 ]
 
 RATE_ADJUSTMENTS_COLUMNS = [

@@ -94,7 +94,11 @@ def get_plan_by_id(plan_id: str, filepath: Path = EXCEL_FILE) -> Optional[pd.Ser
     match = df[df["plan_id"] == plan_id]
     if match.empty:
         return None
-    return match.iloc[0]
+    # 确保返回的 Series 有 paid_up_to_period 字段
+    plan = match.iloc[0]
+    if "paid_up_to_period" not in plan or pd.isna(plan["paid_up_to_period"]):
+        plan["paid_up_to_period"] = 0
+    return plan
 
 
 def save_plan(plan_dict: dict, filepath: Path = EXCEL_FILE):
@@ -136,8 +140,24 @@ def save_repayment_schedule(plan_id: str, records: pd.DataFrame, filepath: Path 
 
 
 def mark_period_paid(plan_id: str, period: int, pay_date: Optional[str] = None, filepath: Path = EXCEL_FILE):
-    """已弃用：标记还款功能暂时移除"""
-    pass
+    """标记还款至某一期（更新方案中的 paid_up_to_period 字段）"""
+    df = get_all_plans(filepath)
+    mask = df["plan_id"] == plan_id
+    if mask.any():
+        # 确保 paid_up_to_period 列存在
+        if "paid_up_to_period" not in df.columns:
+            df["paid_up_to_period"] = 0
+        current_paid = int(df.loc[mask, "paid_up_to_period"].iloc[0]) if pd.notna(df.loc[mask, "paid_up_to_period"].iloc[0]) else 0
+        df.loc[mask, "paid_up_to_period"] = max(current_paid, period)
+        write_sheet(df, SHEET_LOAN_PLANS, filepath)
+
+
+def get_paid_up_to_period(plan_id: str, filepath: Path = EXCEL_FILE) -> int:
+    """获取已还至第几期"""
+    plan = get_plan_by_id(plan_id, filepath)
+    if plan is not None and "paid_up_to_period" in plan and pd.notna(plan["paid_up_to_period"]):
+        return int(plan["paid_up_to_period"])
+    return 0
 
 
 # ---- 利率调整 ----
