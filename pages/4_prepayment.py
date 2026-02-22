@@ -10,7 +10,7 @@ from data_manager.excel_handler import (
 from data_manager.data_validator import validate_prepayment
 from core.prepayment import apply_prepayment, calc_shorten_term, calc_reduce_payment, calc_interest_saved
 from components.forms import render_prepayment_form
-from components.charts import create_monthly_payment_line, create_remaining_principal_line
+from components.charts import create_monthly_payment_line, create_remaining_principal_line, create_multi_schedule_line
 from utils.id_generator import generate_prepayment_id
 from utils.formatters import fmt_amount, fmt_months
 
@@ -106,7 +106,7 @@ if form_data:
     st.divider()
 
     # 预览新还款计划
-    st.subheader("预览新还款计划")
+    st.subheader("预览新还款计划（与原计划对比）")
     start_date = pd.to_datetime(plan["start_date"]).date() if isinstance(plan["start_date"], str) else plan["start_date"]
 
     new_schedule, prepay_info = apply_prepayment(
@@ -115,12 +115,29 @@ if form_data:
         start_date, int(plan["repayment_day"]),
     )
 
-    # 月供对比图
-    fig = create_monthly_payment_line(new_schedule, prepayment_periods=[current_period])
-    st.plotly_chart(fig, width='stretch')
+    # 准备对比数据
+    comparison_schedules = {
+        "原计划": schedule,
+        "提前还款后": new_schedule,
+    }
 
-    fig2 = create_remaining_principal_line(new_schedule)
-    st.plotly_chart(fig2, width='stretch')
+    # 月供对比图
+    fig_payment = create_multi_schedule_line(
+        comparison_schedules,
+        y_col="monthly_payment",
+        title="月供对比（原计划 vs 提前还款后）",
+        y_label="月供金额(元)",
+    )
+    st.plotly_chart(fig_payment, width='stretch')
+
+    # 剩余本金对比图
+    fig_principal = create_multi_schedule_line(
+        comparison_schedules,
+        y_col="remaining_principal",
+        title="剩余本金对比（原计划 vs 提前还款后）",
+        y_label="剩余本金(元)",
+    )
+    st.plotly_chart(fig_principal, width='stretch')
 
     # 确认执行
     if st.button("确认提前还款并更新计划", type="primary"):
