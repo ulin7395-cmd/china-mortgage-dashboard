@@ -6,7 +6,7 @@ from config.constants import LoanType, RepaymentMethod, PlanStatus
 from config.settings import DEFAULT_PROVIDENT_LIMIT
 from data_manager.excel_handler import (
     get_all_plans, save_plan, delete_plan,
-    save_repayment_schedule, init_excel, get_config,
+    init_excel, get_config,
 )
 from data_manager.data_validator import validate_loan_plan
 from core.calculator import generate_schedule, generate_combined_schedule, calc_equal_installment, calc_equal_principal_first_month
@@ -173,32 +173,7 @@ with tab_new:
                 "notes": form_data["notes"],
             }
             save_plan(plan_dict)
-
-            # 生成还款计划
-            start = form_data["start_date"]
-            if lt == LoanType.COMBINED.value:
-                sch = generate_combined_schedule(
-                    plan_id,
-                    form_data["commercial_amount"], form_data["provident_amount"],
-                    form_data["commercial_rate"], form_data["provident_rate"],
-                    form_data["term_months"], form_data["repayment_method"],
-                    start, form_data["repayment_day"],
-                )
-            elif lt == LoanType.COMMERCIAL.value:
-                sch = generate_schedule(
-                    plan_id, form_data["total_amount"], form_data["commercial_rate"],
-                    form_data["term_months"], form_data["repayment_method"],
-                    start, form_data["repayment_day"],
-                )
-            else:
-                sch = generate_schedule(
-                    plan_id, form_data["total_amount"], form_data["provident_rate"],
-                    form_data["term_months"], form_data["repayment_method"],
-                    start, form_data["repayment_day"],
-                )
-
-            save_repayment_schedule(plan_id, sch)
-            st.info(f"已生成 {len(sch)} 期还款计划。")
+            st.info("方案已保存，还款计划将在需要时动态生成。")
 
             # 清除编辑状态
             if editing_plan_id:

@@ -74,7 +74,7 @@ LOAN_PLANS_COLUMNS = [
 ]
 
 RATE_ADJUSTMENTS_COLUMNS = [
-    "adjustment_id", "plan_id", "effective_date", "rate_type",
+    "adjustment_id", "plan_id", "effective_date", "effective_period", "rate_type",
     "old_rate", "new_rate", "lpr_value", "basis_points", "reason",
 ]
 
@@ -86,7 +86,7 @@ REPAYMENT_SCHEDULE_COLUMNS = [
 ]
 
 PREPAYMENTS_COLUMNS = [
-    "prepayment_id", "plan_id", "prepayment_date", "amount",
+    "prepayment_id", "plan_id", "prepayment_date", "prepayment_period", "amount",
     "method", "remaining_principal_before", "remaining_principal_after",
     "old_term_remaining", "new_term_remaining",
     "old_monthly_payment", "new_monthly_payment", "interest_saved",

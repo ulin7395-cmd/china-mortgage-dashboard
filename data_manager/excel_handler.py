@@ -39,8 +39,6 @@ def init_excel(filepath: Path = EXCEL_FILE):
             writer, sheet_name=SHEET_LOAN_PLANS, index=False)
         pd.DataFrame(columns=RATE_ADJUSTMENTS_COLUMNS).to_excel(
             writer, sheet_name=SHEET_RATE_ADJUSTMENTS, index=False)
-        pd.DataFrame(columns=REPAYMENT_SCHEDULE_COLUMNS).to_excel(
-            writer, sheet_name=SHEET_REPAYMENT_SCHEDULE, index=False)
         pd.DataFrame(columns=PREPAYMENTS_COLUMNS).to_excel(
             writer, sheet_name=SHEET_PREPAYMENTS, index=False)
         config_df = pd.DataFrame(_default_config_rows(), columns=CONFIG_COLUMNS)
@@ -117,34 +115,29 @@ def delete_plan(plan_id: str, filepath: Path = EXCEL_FILE):
     df = df[df["plan_id"] != plan_id]
     write_sheet(df, SHEET_LOAN_PLANS, filepath)
     # 同时删除关联数据
-    for sheet in [SHEET_REPAYMENT_SCHEDULE, SHEET_RATE_ADJUSTMENTS, SHEET_PREPAYMENTS]:
+    for sheet in [SHEET_RATE_ADJUSTMENTS, SHEET_PREPAYMENTS]:
         sdf = read_sheet(sheet, filepath)
         if "plan_id" in sdf.columns:
             sdf = sdf[sdf["plan_id"] != plan_id]
             write_sheet(sdf, sheet, filepath)
 
 
-# ---- 还款计划 ----
+# ---- 还款计划 (已弃用，使用 core/schedule_generator.py 动态生成) ----
 
 def get_repayment_schedule(plan_id: str, filepath: Path = EXCEL_FILE) -> pd.DataFrame:
-    df = read_sheet(SHEET_REPAYMENT_SCHEDULE, filepath)
-    return df[df["plan_id"] == plan_id].reset_index(drop=True)
+    """已弃用：请使用 core.schedule_generator.get_plan_schedule"""
+    from core.schedule_generator import get_plan_schedule
+    return get_plan_schedule(plan_id)
 
 
 def save_repayment_schedule(plan_id: str, records: pd.DataFrame, filepath: Path = EXCEL_FILE):
-    """保存还款计划（替换该方案的所有记录）"""
-    df = read_sheet(SHEET_REPAYMENT_SCHEDULE, filepath)
-    df = df[df["plan_id"] != plan_id]
-    df = pd.concat([df, records], ignore_index=True)
-    write_sheet(df, SHEET_REPAYMENT_SCHEDULE, filepath)
+    """已弃用：不再保存完整还款计划，仅保存事件记录"""
+    pass
 
 
 def mark_period_paid(plan_id: str, period: int, pay_date: Optional[str] = None, filepath: Path = EXCEL_FILE):
-    df = read_sheet(SHEET_REPAYMENT_SCHEDULE, filepath)
-    mask = (df["plan_id"] == plan_id) & (df["period"] == period)
-    df.loc[mask, "is_paid"] = True
-    df.loc[mask, "actual_pay_date"] = pay_date or datetime.now().strftime("%Y-%m-%d")
-    write_sheet(df, SHEET_REPAYMENT_SCHEDULE, filepath)
+    """已弃用：标记还款功能暂时移除"""
+    pass
 
 
 # ---- 利率调整 ----

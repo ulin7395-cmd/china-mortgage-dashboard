@@ -4,7 +4,8 @@ import pandas as pd
 
 from config.constants import LoanType
 from config.settings import COLORS
-from data_manager.excel_handler import get_all_plans, get_repayment_schedule, get_prepayments, get_rate_adjustments
+from data_manager.excel_handler import get_all_plans
+from core.schedule_generator import get_plan_schedule
 from components.charts import (
     create_principal_interest_pie, create_monthly_payment_line,
     create_stacked_area, create_remaining_principal_line, create_cumulative_chart,
@@ -32,7 +33,7 @@ plan_id = plan_ids[selected_idx]
 plan = active_plans[active_plans["plan_id"] == plan_id].iloc[0]
 
 # 获取综合还款计划
-combined_schedule = get_repayment_schedule(plan_id)
+combined_schedule = get_plan_schedule(plan_id)
 
 if combined_schedule.empty:
     st.warning("该方案暂无还款计划数据。")

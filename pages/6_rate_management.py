@@ -4,9 +4,10 @@ import pandas as pd
 from datetime import date
 
 from data_manager.excel_handler import (
-    get_all_plans, get_repayment_schedule, get_rate_adjustments,
-    save_repayment_schedule, save_rate_adjustment, get_config, set_config,
+    get_all_plans, get_rate_adjustments,
+    save_rate_adjustment, get_config, set_config,
 )
+from core.schedule_generator import get_plan_schedule
 from data_manager.data_validator import validate_rate_adjustment
 from core.rate_adjustment import apply_rate_adjustment
 from config.constants import RateType
@@ -57,7 +58,7 @@ selected_name = st.selectbox("选择方案", plan_names)
 plan_id = plan_ids[plan_names.index(selected_name)]
 plan = active_plans[active_plans["plan_id"] == plan_id].iloc[0]
 
-schedule = get_repayment_schedule(plan_id)
+schedule = get_plan_schedule(plan_id)
 if schedule.empty:
     st.warning("暂无还款计划。")
     st.stop()
@@ -127,6 +128,7 @@ if submitted:
             "adjustment_id": generate_adjustment_id(),
             "plan_id": plan_id,
             "effective_date": effective_date.strftime("%Y-%m-%d"),
+            "effective_period": effective_period,
             "rate_type": rate_type,
             "old_rate": old_rate,
             "new_rate": new_rate,
@@ -136,10 +138,7 @@ if submitted:
         }
         save_rate_adjustment(adj_record)
 
-        # 更新还款计划
-        save_repayment_schedule(plan_id, new_schedule)
-
-        st.success("利率调整已确认，还款计划已更新！")
+        st.success("利率调整已确认！")
         st.rerun()
 
 # 历史调整记录

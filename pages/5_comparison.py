@@ -3,7 +3,8 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 
-from data_manager.excel_handler import get_all_plans, get_repayment_schedule
+from data_manager.excel_handler import get_all_plans
+from core.schedule_generator import get_plan_schedule
 from core.comparison import compare_plans, compare_repayment_methods
 from core.inflation import adjust_for_inflation, calc_real_cost
 from components.charts import (
@@ -38,7 +39,7 @@ with tab_plans:
 
         schedules = {}
         for p in plan_list:
-            sch = get_repayment_schedule(p["plan_id"])
+            sch = get_plan_schedule(p["plan_id"])
             if not sch.empty:
                 for col in ["monthly_payment", "principal", "interest", "remaining_principal",
                             "cumulative_principal", "cumulative_interest"]:

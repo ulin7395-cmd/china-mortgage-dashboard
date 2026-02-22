@@ -2,7 +2,8 @@
 import streamlit as st
 import pandas as pd
 
-from data_manager.excel_handler import get_all_plans, get_repayment_schedule, mark_period_paid
+from data_manager.excel_handler import get_all_plans
+from core.schedule_generator import get_plan_schedule
 from components.tables import render_repayment_table
 from components.charts import create_stacked_area, create_remaining_principal_line
 from core.calculator import calc_remaining_irr
@@ -23,7 +24,7 @@ selected_name = st.selectbox("选择方案", plan_names)
 plan_id = plan_ids[plan_names.index(selected_name)]
 plan = plans[plans["plan_id"] == plan_id].iloc[0]
 
-schedule = get_repayment_schedule(plan_id)
+schedule = get_plan_schedule(plan_id)
 if schedule.empty:
     st.warning("该方案暂无还款计划。")
     st.stop()
@@ -65,30 +66,6 @@ remaining_schedule = schedule[~paid_mask]
 remaining_principal = float(remaining_schedule.iloc[0]["remaining_principal"] + remaining_schedule.iloc[0]["principal"]) if not remaining_schedule.empty else 0
 remaining_irr = calc_remaining_irr(remaining_principal, remaining_schedule)
 c8.metric("剩余年化率(IRR)", fmt_rate(remaining_irr))
-
-st.divider()
-
-# 标记已还
-st.subheader("标记还款")
-unpaid_periods = schedule[~paid_mask]["period"].tolist()
-if unpaid_periods:
-    col_a, col_b = st.columns([3, 1])
-    with col_a:
-        mark_up_to = st.selectbox(
-            "标记已还至第N期",
-            options=unpaid_periods,
-            index=0,
-        )
-    with col_b:
-        st.write("")
-        st.write("")
-        if st.button("确认标记", type="primary"):
-            for p in range(1, int(mark_up_to) + 1):
-                mark_period_paid(plan_id, p)
-            st.success(f"已标记至第 {mark_up_to} 期")
-            st.rerun()
-else:
-    st.success("所有期数均已还清！")
 
 st.divider()
 

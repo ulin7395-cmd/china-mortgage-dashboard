@@ -4,9 +4,9 @@ import pandas as pd
 from datetime import date
 
 from data_manager.excel_handler import (
-    get_all_plans, get_repayment_schedule,
-    save_repayment_schedule, save_prepayment,
+    get_all_plans, save_prepayment,
 )
+from core.schedule_generator import get_plan_schedule
 from data_manager.data_validator import validate_prepayment
 from core.prepayment import apply_prepayment, calc_shorten_term, calc_reduce_payment, calc_interest_saved
 from components.forms import render_prepayment_form
@@ -31,7 +31,7 @@ selected_name = st.selectbox("选择方案", plan_names)
 plan_id = plan_ids[plan_names.index(selected_name)]
 plan = active_plans[active_plans["plan_id"] == plan_id].iloc[0]
 
-schedule = get_repayment_schedule(plan_id)
+schedule = get_plan_schedule(plan_id)
 if schedule.empty:
     st.warning("暂无还款计划。")
     st.stop()
@@ -141,14 +141,12 @@ if form_data:
 
     # 确认执行
     if st.button("确认提前还款并更新计划", type="primary"):
-        # 保存新计划
-        save_repayment_schedule(plan_id, new_schedule)
-
         # 保存提前还款记录
         prepay_record = {
             "prepayment_id": generate_prepayment_id(),
             "plan_id": plan_id,
             "prepayment_date": form_data["prepayment_date"].strftime("%Y-%m-%d"),
+            "prepayment_period": current_period,
             "amount": amount,
             "method": method,
             **prepay_info,
