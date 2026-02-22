@@ -121,27 +121,43 @@ def generate_plan_schedule_from_events(
         event_period = event["period"]
 
         # 跳过已还完的期数（事件在已还期数中，不重新应用）
-        if event_period < 1 or event_period > len(schedule):
+        # 只有当事件发生在未还期数时才应用（event_period > paid_up_to）
+        if event_period < 1 or event_period > len(schedule) or event_period <= paid_up_to:
             continue
 
         if event["type"] == "rate_adjustment":
             ra = event["data"]
             new_rate = float(ra["new_rate"])
-            schedule, _ = apply_rate_adjustment(
-                plan_id, schedule, event_period, new_rate,
-                repayment_method, start_date, repayment_day,
-            )
+            # 组合贷暂不支持利率调整事件（需要分别处理商贷和公积金）
+            if loan_type != LoanType.COMBINED.value:
+                schedule, _ = apply_rate_adjustment(
+                    plan_id, schedule, event_period, new_rate,
+                    repayment_method, start_date, repayment_day,
+                )
         elif event["type"] == "prepayment":
             pp = event["data"]
             prepay_amount = float(pp["amount"])
             method = pp["method"]
-            # 获取当前执行时的利率
-            current_row = schedule[schedule["period"] == event_period]
-            applied_rate = float(current_row.iloc[0]["applied_rate"]) if not current_row.empty else annual_rate
-            schedule, _ = apply_prepayment(
-                plan_id, schedule, event_period, prepay_amount, method,
-                applied_rate, repayment_method, start_date, repayment_day,
-            )
+            prepayment_type = pp.get("prepayment_type")
+
+            if loan_type == LoanType.COMBINED.value and prepayment_type in ["commercial", "provident", "both"]:
+                # 组合贷提前还款 - 使用 apply_combined_prepayment
+                from core.prepayment import apply_combined_prepayment
+                amount_c = float(pp.get("amount_commercial", 0))
+                amount_p = float(pp.get("amount_provident", 0))
+                schedule, _ = apply_combined_prepayment(
+                    plan_id, plan, schedule, event_period,
+                    prepayment_type, amount_c, amount_p, method,
+                    start_date, repayment_day,
+                )
+            elif loan_type != LoanType.COMBINED.value:
+                # 普通贷款提前还款
+                current_row = schedule[schedule["period"] == event_period]
+                applied_rate = float(current_row.iloc[0]["applied_rate"]) if not current_row.empty else annual_rate
+                schedule, _ = apply_prepayment(
+                    plan_id, schedule, event_period, prepay_amount, method,
+                    applied_rate, repayment_method, start_date, repayment_day,
+                )
 
     # 重新标记已还期数（应用事件后可能改变了 schedule 结构）
     if paid_up_to > 0:

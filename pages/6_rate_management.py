@@ -10,7 +10,7 @@ from data_manager.excel_handler import (
 from core.schedule_generator import get_plan_schedule
 from data_manager.data_validator import validate_rate_adjustment
 from core.rate_adjustment import apply_rate_adjustment
-from config.constants import RateType
+from config.constants import RateType, LoanType
 from utils.id_generator import generate_adjustment_id
 from utils.formatters import fmt_amount, fmt_rate
 
@@ -57,6 +57,11 @@ plan_ids = active_plans["plan_id"].tolist()
 selected_name = st.selectbox("选择方案", plan_names)
 plan_id = plan_ids[plan_names.index(selected_name)]
 plan = active_plans[active_plans["plan_id"] == plan_id].iloc[0]
+
+# 检查是否是组合贷
+if plan["loan_type"] == LoanType.COMBINED.value:
+    st.error("⚠️  组合贷暂不支持利率调整功能。\n\n当前架构需要分别处理商贷和公积金部分的利率调整，敬请期待后续更新。")
+    st.stop()
 
 schedule = get_plan_schedule(plan_id)
 if schedule.empty:

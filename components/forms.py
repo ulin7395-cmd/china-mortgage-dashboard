@@ -182,25 +182,91 @@ def render_loan_plan_form(
 def render_prepayment_form(
     remaining_principal: float,
     key_prefix: str = "prepay",
+    is_combined_loan: bool = False,
+    remaining_commercial: Optional[float] = None,
+    remaining_provident: Optional[float] = None,
 ) -> dict | None:
-    """渲染提前还款表单"""
+    """渲染提前还款表单
+
+    Args:
+        remaining_principal: 总剩余本金
+        key_prefix: 表单key前缀
+        is_combined_loan: 是否是组合贷
+        remaining_commercial: 商贷剩余本金（组合贷时需要）
+        remaining_provident: 公积金剩余本金（组合贷时需要）
+    """
     with st.form(f"{key_prefix}_form"):
         st.subheader("提前还款")
-        st.write(f"当前剩余本金: **{remaining_principal:,.2f} 元**")
 
-        c1, c2 = st.columns(2)
-        with c1:
-            amount = st.number_input(
-                "提前还款金额(元)", min_value=10000.0,
-                max_value=remaining_principal - 1,
-                value=min(100000.0, remaining_principal - 1),
-                step=10000.0, key=f"{key_prefix}_amount",
+        if is_combined_loan and remaining_commercial is not None and remaining_provident is not None:
+            st.write(f"当前剩余本金: **商贷 {remaining_commercial:,.2f} 元 + 公积金 {remaining_provident:,.2f} 元 = 总计 {remaining_principal:,.2f} 元**")
+
+            prepayment_type = st.radio(
+                "选择还款部分",
+                options=["commercial", "provident", "both"],
+                format_func=lambda x: {
+                    "commercial": "仅还商贷",
+                    "provident": "仅还公积金",
+                    "both": "同时还商贷和公积金（按比例）",
+                }[x],
+                key=f"{key_prefix}_type",
             )
-        with c2:
-            prepay_date = st.date_input(
-                "还款日期", value=date.today(),
-                key=f"{key_prefix}_date",
-            )
+
+            if prepayment_type == "commercial":
+                max_amount = remaining_commercial - 1
+                default_amount = min(100000.0, max_amount)
+                amount = st.number_input(
+                    "提前还款金额(元)（仅商贷）", min_value=10000.0,
+                    max_value=max_amount,
+                    value=default_amount,
+                    step=10000.0, key=f"{key_prefix}_amount",
+                )
+                amount_commercial = amount
+                amount_provident = 0.0
+            elif prepayment_type == "provident":
+                max_amount = remaining_provident - 1
+                default_amount = min(100000.0, max_amount)
+                amount = st.number_input(
+                    "提前还款金额(元)（仅公积金）", min_value=10000.0,
+                    max_value=max_amount,
+                    value=default_amount,
+                    step=10000.0, key=f"{key_prefix}_amount",
+                )
+                amount_commercial = 0.0
+                amount_provident = amount
+            else:
+                # 按比例同时还
+                total_amount = st.number_input(
+                    "提前还款总金额(元)", min_value=10000.0,
+                    max_value=remaining_principal - 1,
+                    value=min(100000.0, remaining_principal - 1),
+                    step=10000.0, key=f"{key_prefix}_amount",
+                )
+                # 按比例分配
+                ratio_commercial = remaining_commercial / remaining_principal
+                amount_commercial = total_amount * ratio_commercial
+                amount_provident = total_amount - amount_commercial
+                st.write(f"商贷部分还款: {amount_commercial:,.2f} 元 | 公积金部分还款: {amount_provident:,.2f} 元")
+                amount = total_amount
+        else:
+            st.write(f"当前剩余本金: **{remaining_principal:,.2f} 元**")
+            prepayment_type = None
+            amount_commercial = None
+            amount_provident = None
+
+            c1, c2 = st.columns(2)
+            with c1:
+                amount = st.number_input(
+                    "提前还款金额(元)", min_value=10000.0,
+                    max_value=remaining_principal - 1,
+                    value=min(100000.0, remaining_principal - 1),
+                    step=10000.0, key=f"{key_prefix}_amount",
+                )
+            with c2:
+                prepay_date = st.date_input(
+                    "还款日期", value=date.today(),
+                    key=f"{key_prefix}_date",
+                )
 
         method = st.radio(
             "还款方式",
@@ -209,12 +275,28 @@ def render_prepayment_form(
             key=f"{key_prefix}_method",
         )
 
+        # 非组合贷时显示还款日期
+        if not is_combined_loan:
+            prepay_date = st.date_input(
+                "还款日期", value=date.today(),
+                key=f"{key_prefix}_date_2",
+            )
+        else:
+            prepay_date = st.date_input(
+                "还款日期", value=date.today(),
+                key=f"{key_prefix}_date_comb",
+            )
+
         submitted = st.form_submit_button("模拟计算", width='stretch')
 
         if submitted:
-            return {
+            result = {
                 "amount": amount,
                 "prepayment_date": prepay_date,
                 "method": method,
+                "prepayment_type": prepayment_type,
+                "amount_commercial": amount_commercial,
+                "amount_provident": amount_provident,
             }
+            return result
     return None

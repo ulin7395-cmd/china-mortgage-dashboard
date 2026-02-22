@@ -90,6 +90,7 @@ PREPAYMENTS_COLUMNS = [
     "method", "remaining_principal_before", "remaining_principal_after",
     "old_term_remaining", "new_term_remaining",
     "old_monthly_payment", "new_monthly_payment", "interest_saved",
+    "prepayment_type",  # 新增：组合贷时指定还商贷还是公积金，可选 "commercial" / "provident" / "combined"
 ]
 
 CONFIG_COLUMNS = ["key", "value", "description", "updated_at"]
