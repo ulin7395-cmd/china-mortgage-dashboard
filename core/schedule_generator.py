@@ -51,17 +51,17 @@ def generate_plan_schedule_from_events(
 
     # 初始本金和利率
     if loan_type == LoanType.COMBINED.value:
-        commercial_principal = float(plan["commercial_principal"])
-        provident_principal = float(plan["provident_principal"])
+        commercial_principal = float(plan["commercial_amount"])
+        provident_principal = float(plan["provident_amount"])
         commercial_rate = float(plan["commercial_rate"])
         provident_rate = float(plan["provident_rate"])
         principal = commercial_principal + provident_principal
         annual_rate = commercial_rate  # 组合贷默认用商贷利率
     elif loan_type == LoanType.PROVIDENT.value:
-        principal = float(plan["provident_principal"])
+        principal = float(plan["provident_amount"])
         annual_rate = float(plan["provident_rate"])
     else:
-        principal = float(plan["commercial_principal"])
+        principal = float(plan["commercial_amount"])
         annual_rate = float(plan["commercial_rate"])
 
     term_months = int(plan["term_months"])
@@ -87,6 +87,9 @@ def generate_plan_schedule_from_events(
     # 添加利率调整事件
     if rate_adjustments is not None and not rate_adjustments.empty:
         for _, ra in rate_adjustments.iterrows():
+            # 兼容旧数据：如果没有 effective_period，暂时跳过
+            if "effective_period" not in ra or pd.isna(ra["effective_period"]):
+                continue
             events.append({
                 "type": "rate_adjustment",
                 "period": int(ra["effective_period"]),
@@ -96,9 +99,12 @@ def generate_plan_schedule_from_events(
     # 添加提前还款事件
     if prepayments is not None and not prepayments.empty:
         for _, pp in prepayments.iterrows():
+            # 兼容旧数据：如果没有 prepayment_period，暂时跳过
+            if "prepayment_period" not in pp or pd.isna(pp["prepayment_period"]):
+                continue
             events.append({
                 "type": "prepayment",
-                "period": int(pp.get("prepayment_period", pp.get("period", 1))),
+                "period": int(pp["prepayment_period"]),
                 "data": pp,
             })
 
