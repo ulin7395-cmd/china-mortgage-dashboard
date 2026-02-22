@@ -111,11 +111,16 @@ def generate_plan_schedule_from_events(
     # 按期数排序事件
     events.sort(key=lambda e: e["period"])
 
+    # 先标记已还期数
+    paid_up_to = int(plan.get("paid_up_to_period", 0))
+    if paid_up_to > 0:
+        schedule.loc[schedule["period"] <= paid_up_to, "is_paid"] = True
+
     # 依次应用事件
     for event in events:
         event_period = event["period"]
 
-        # 跳过已还完的期数
+        # 跳过已还完的期数（事件在已还期数中，不重新应用）
         if event_period < 1 or event_period > len(schedule):
             continue
 
@@ -138,8 +143,7 @@ def generate_plan_schedule_from_events(
                 applied_rate, repayment_method, start_date, repayment_day,
             )
 
-    # 标记已还期数
-    paid_up_to = int(plan.get("paid_up_to_period", 0))
+    # 重新标记已还期数（应用事件后可能改变了 schedule 结构）
     if paid_up_to > 0:
         schedule.loc[schedule["period"] <= paid_up_to, "is_paid"] = True
 

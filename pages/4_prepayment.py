@@ -52,7 +52,8 @@ remaining_principal = float(unpaid.iloc[0]["remaining_principal"]) + float(unpai
 remaining_term = len(unpaid)
 current_monthly = float(unpaid.iloc[0]["monthly_payment"])
 
-annual_rate = float(plan["commercial_rate"]) if plan["loan_type"] != "provident" else float(plan["provident_rate"])
+# 使用当前实际执行的利率（考虑利率调整）
+annual_rate = float(unpaid.iloc[0]["applied_rate"])
 
 st.write(f"**当前期数:** 第 {current_period} 期 | **剩余本金:** {fmt_amount(remaining_principal)} | **剩余期数:** {remaining_term}期 | **当前月供:** {fmt_amount(current_monthly)}")
 
