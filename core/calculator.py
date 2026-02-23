@@ -19,11 +19,11 @@ def calc_equal_installment(
     """等额本息：返回 (月供, 总利息)"""
     if annual_rate == 0:
         monthly = principal / term_months
-        return round(monthly, 2), 0.0
+        return monthly, 0.0
     r = annual_rate / 100 / 12
     monthly = principal * r * (1 + r) ** term_months / ((1 + r) ** term_months - 1)
     total_interest = monthly * term_months - principal
-    return round(monthly, 2), round(total_interest, 2)
+    return monthly, total_interest
 
 
 def calc_equal_principal_first_month(
@@ -34,7 +34,7 @@ def calc_equal_principal_first_month(
     """等额本金：返回 (首月月供, 总利息)"""
     if annual_rate == 0:
         monthly = principal / term_months
-        return round(monthly, 2), 0.0
+        return monthly, 0.0
     r = annual_rate / 100 / 12
     base_principal = principal / term_months
     first_interest = principal * r
@@ -42,7 +42,7 @@ def calc_equal_principal_first_month(
     total_interest = sum(
         (principal - i * base_principal) * r for i in range(term_months)
     )
-    return round(first_monthly, 2), round(total_interest, 2)
+    return first_monthly, total_interest
 
 
 def generate_schedule(
@@ -102,12 +102,12 @@ def generate_schedule(
             "plan_id": plan_id,
             "period": period,
             "due_date": due.strftime("%Y-%m-%d"),
-            "monthly_payment": round(payment, 2),
-            "principal": round(prin, 2),
-            "interest": round(interest, 2),
-            "remaining_principal": round(remaining, 2),
-            "cumulative_principal": round(cum_principal, 2),
-            "cumulative_interest": round(cum_interest, 2),
+            "monthly_payment": payment,
+            "principal": prin,
+            "interest": interest,
+            "remaining_principal": remaining,
+            "cumulative_principal": cum_principal,
+            "cumulative_interest": cum_interest,
             "applied_rate": annual_rate,
             "is_paid": False,
             "actual_pay_date": None,

@@ -199,6 +199,9 @@ def render_prepayment_form(
         st.subheader("提前还款")
 
         if is_combined_loan and remaining_commercial is not None and remaining_provident is not None:
+            if remaining_commercial <= 1 and remaining_provident <= 1:
+                st.warning("剩余本金过小，无法进行提前还款。")
+                return None
             st.write(f"当前剩余本金: **商贷 {remaining_commercial:,.2f} 元 + 公积金 {remaining_provident:,.2f} 元 = 总计 {remaining_principal:,.2f} 元**")
 
             prepayment_type = st.radio(
@@ -213,10 +216,10 @@ def render_prepayment_form(
             )
 
             if prepayment_type == "commercial":
-                max_amount = remaining_commercial - 1
+                max_amount = max(remaining_commercial - 1, 1.0)
                 default_amount = min(100000.0, max_amount)
                 amount = st.number_input(
-                    "提前还款金额(元)（仅商贷）", min_value=10000.0,
+                    "提前还款金额(元)（仅商贷）", min_value=1.0,
                     max_value=max_amount,
                     value=default_amount,
                     step=10000.0, key=f"{key_prefix}_amount",
@@ -224,10 +227,10 @@ def render_prepayment_form(
                 amount_commercial = amount
                 amount_provident = 0.0
             elif prepayment_type == "provident":
-                max_amount = remaining_provident - 1
+                max_amount = max(remaining_provident - 1, 1.0)
                 default_amount = min(100000.0, max_amount)
                 amount = st.number_input(
-                    "提前还款金额(元)（仅公积金）", min_value=10000.0,
+                    "提前还款金额(元)（仅公积金）", min_value=1.0,
                     max_value=max_amount,
                     value=default_amount,
                     step=10000.0, key=f"{key_prefix}_amount",
@@ -236,10 +239,13 @@ def render_prepayment_form(
                 amount_provident = amount
             else:
                 # 按比例同时还
+                if remaining_principal <= 1:
+                    st.warning("剩余本金过小，无法进行提前还款。")
+                    return None
                 total_amount = st.number_input(
-                    "提前还款总金额(元)", min_value=10000.0,
-                    max_value=remaining_principal - 1,
-                    value=min(100000.0, remaining_principal - 1),
+                    "提前还款总金额(元)", min_value=1.0,
+                    max_value=max(remaining_principal - 1, 1.0),
+                    value=min(100000.0, max(remaining_principal - 1, 1.0)),
                     step=10000.0, key=f"{key_prefix}_amount",
                 )
                 # 按比例分配
@@ -249,15 +255,18 @@ def render_prepayment_form(
                 st.write(f"商贷部分还款: {amount_commercial:,.2f} 元 | 公积金部分还款: {amount_provident:,.2f} 元")
                 amount = total_amount
         else:
+            if remaining_principal <= 1:
+                st.warning("剩余本金过小，无法进行提前还款。")
+                return None
             st.write(f"当前剩余本金: **{remaining_principal:,.2f} 元**")
             prepayment_type = None
             amount_commercial = None
             amount_provident = None
 
             amount = st.number_input(
-                "提前还款金额(元)", min_value=10000.0,
-                max_value=remaining_principal - 1,
-                value=min(100000.0, remaining_principal - 1),
+                "提前还款金额(元)", min_value=1.0,
+                max_value=max(remaining_principal - 1, 1.0),
+                value=min(100000.0, max(remaining_principal - 1, 1.0)),
                 step=10000.0, key=f"{key_prefix}_amount",
             )
 

@@ -10,8 +10,7 @@ from components.charts import (
     create_principal_interest_pie, create_monthly_payment_line,
     create_stacked_area, create_remaining_principal_line, create_cumulative_chart,
 )
-from utils.formatters import fmt_amount, fmt_percent, fmt_months, fmt_rate
-from core.calculator import calc_irr
+from utils.formatters import fmt_amount, fmt_percent, fmt_months
 
 
 st.set_page_config(page_title="主仪表盘", page_icon="📊", layout="wide")
@@ -78,12 +77,12 @@ if is_combined:
         start_date, repayment_day, repayment_method, term_months
     )
 
+    schedules["combined"] = combined_schedule
+    schedule_titles["combined"] = "综合汇总"
     schedules["commercial"] = commercial_schedule
     schedule_titles["commercial"] = "商业贷款"
     schedules["provident"] = provident_schedule
     schedule_titles["provident"] = "公积金贷款"
-    schedules["combined"] = combined_schedule
-    schedule_titles["combined"] = "综合汇总"
 else:
     # 单一贷款类型
     schedules["single"] = combined_schedule
@@ -95,7 +94,52 @@ else:
         schedule_titles["single"] = "贷款详情"
 
 
-def render_schedule_module(sch: pd.DataFrame, title: str, prefix: str, color: str = None, prepayment_periods: list = None, original_principal: float = None):
+def _to_float(value) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _sum_prepayment_amount(prepayments: pd.DataFrame, scope: str) -> float:
+    if prepayments is None or prepayments.empty:
+        return 0.0
+    df = prepayments.copy()
+    if "prepayment_type" not in df.columns:
+        df["prepayment_type"] = "both"
+    df["prepayment_type"] = df["prepayment_type"].replace({"combined": "both"}).fillna("both")
+
+    if scope == "commercial":
+        df = df[df["prepayment_type"].isin(["commercial", "both"])]
+        if "amount_commercial" in df.columns:
+            return df["amount_commercial"].apply(_to_float).sum()
+        return df["amount"].apply(_to_float).sum() if "amount" in df.columns else 0.0
+    if scope == "provident":
+        df = df[df["prepayment_type"].isin(["provident", "both"])]
+        if "amount_provident" in df.columns:
+            return df["amount_provident"].apply(_to_float).sum()
+        return df["amount"].apply(_to_float).sum() if "amount" in df.columns else 0.0
+
+    if "amount" in df.columns:
+        return df["amount"].apply(_to_float).sum()
+    total = 0.0
+    if "amount_commercial" in df.columns:
+        total += df["amount_commercial"].apply(_to_float).sum()
+    if "amount_provident" in df.columns:
+        total += df["amount_provident"].apply(_to_float).sum()
+    return total
+
+
+def render_schedule_module(
+    sch: pd.DataFrame,
+    title: str,
+    prefix: str,
+    color: str = None,
+    prepayment_periods: list = None,
+    original_principal: float = None,
+    prepayments: pd.DataFrame = None,
+    scope: str = "combined",
+):
     """渲染单个贷款模块的统计和图表"""
     st.subheader(title)
 
@@ -122,6 +166,7 @@ def render_schedule_module(sch: pd.DataFrame, title: str, prefix: str, color: st
 
     paid_mask = sch["is_paid"] == True
     paid_principal = sch.loc[paid_mask, "principal"].sum()
+    paid_principal += _sum_prepayment_amount(prepayments, scope)
     paid_interest = sch.loc[paid_mask, "interest"].sum()
 
     # 未还本金从剩余本金反推，比直接求和更准确
@@ -186,32 +231,6 @@ def render_schedule_module(sch: pd.DataFrame, title: str, prefix: str, color: st
     st.plotly_chart(fig_cum, width='stretch', key=f"{prefix}_cum")
 
 
-# 渲染综合概览（仅组合贷显示）
-if is_combined:
-    st.divider()
-    st.header("📊 综合概览")
-
-    # 综合统计
-    total_amount = float(plan["total_amount"])
-    total_interest = combined_schedule["interest"].sum()
-
-    paid_mask = combined_schedule["is_paid"] == True
-    paid_principal = combined_schedule.loc[paid_mask, "principal"].sum()
-    paid_interest = combined_schedule.loc[paid_mask, "interest"].sum()
-
-    paid_periods = int(paid_mask.sum())
-    total_periods = len(combined_schedule)
-    paid_ratio = paid_principal / total_amount if total_amount > 0 else 0
-
-    # 真实年化率
-    irr = calc_irr(total_amount, combined_schedule)
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("贷款总额", fmt_amount(total_amount))
-    c2.metric("总利息", fmt_amount(total_interest))
-    c3.metric("已还本金", fmt_amount(paid_principal))
-    c4.metric("真实年化率(IRR)", fmt_rate(irr))
-
 # 渲染各模块
 for key in schedules:
     st.divider()
@@ -227,4 +246,13 @@ for key in schedules:
     else:
         color = None
         original_principal = float(plan["total_amount"])
-    render_schedule_module(schedules[key], schedule_titles[key], key, color, prepayment_periods, original_principal)
+    render_schedule_module(
+        schedules[key],
+        schedule_titles[key],
+        key,
+        color,
+        prepayment_periods,
+        original_principal,
+        prepayments,
+        key,
+    )

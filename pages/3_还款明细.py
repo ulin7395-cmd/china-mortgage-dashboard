@@ -43,10 +43,31 @@ for col in ["monthly_payment", "principal", "interest", "remaining_principal",
 
 schedule["is_paid"] = schedule["is_paid"].astype(bool)
 
+def _to_float(value) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _sum_prepayment_amount(prepayments: pd.DataFrame) -> float:
+    if prepayments is None or prepayments.empty:
+        return 0.0
+    df = prepayments.copy()
+    if "amount" in df.columns:
+        return df["amount"].apply(_to_float).sum()
+    total = 0.0
+    if "amount_commercial" in df.columns:
+        total += df["amount_commercial"].apply(_to_float).sum()
+    if "amount_provident" in df.columns:
+        total += df["amount_provident"].apply(_to_float).sum()
+    return total
+
 # 统计
 total_amount = float(plan["total_amount"])
 paid_mask = schedule["is_paid"] == True
 paid_principal = schedule.loc[paid_mask, "principal"].sum()
+paid_principal += _sum_prepayment_amount(prepayments)
 paid_interest = schedule.loc[paid_mask, "interest"].sum()
 unpaid_sch = schedule[~paid_mask]
 if not unpaid_sch.empty:

@@ -4,12 +4,12 @@
 根据贷款方案基础信息 + 事件历史（利率调整、提前还款）动态生成完整还款计划，
 不再存储完整计划到 Excel，保证每次计算的准确性。
 """
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, Tuple, Dict, List
 
 import pandas as pd
 
-from config.constants import RepaymentMethod, LoanType, REPAYMENT_SCHEDULE_COLUMNS
+from config.constants import RepaymentMethod, LoanType, PrepaymentMethod, REPAYMENT_SCHEDULE_COLUMNS
 from core.calculator import generate_schedule, generate_combined_schedule
 from core.prepayment import apply_prepayment
 from core.rate_adjustment import apply_rate_adjustment
@@ -26,11 +26,59 @@ def _parse_date(d) -> Optional[date]:
     """解析日期，支持字符串或 date 对象"""
     if d is None or pd.isna(d):
         return None
+    if isinstance(d, datetime):
+        return d.date()
+    if isinstance(d, pd.Timestamp):
+        return d.date()
     if isinstance(d, date):
         return d
     if isinstance(d, str):
         return date.fromisoformat(d[:10])
     return None
+
+
+def _event_sort_key(event: Dict) -> tuple:
+    priority = {"rate_adjustment": 0, "prepayment": 1}
+    return (event["period"], priority.get(event["type"], 9), event.get("_order", 0))
+
+
+def _normalize_combined_prepayment(pp: pd.Series, plan: pd.Series) -> Dict[str, float | str]:
+    prepayment_type = pp.get("prepayment_type")
+    if prepayment_type == "combined":
+        prepayment_type = "both"
+    amount_c = float(pp.get("amount_commercial", 0) or 0)
+    amount_p = float(pp.get("amount_provident", 0) or 0)
+    total_amount = float(pp.get("amount", 0) or 0)
+    if prepayment_type not in ["commercial", "provident", "both"]:
+        if amount_c > 0 and amount_p > 0:
+            prepayment_type = "both"
+        elif amount_c > 0:
+            prepayment_type = "commercial"
+        elif amount_p > 0:
+            prepayment_type = "provident"
+        else:
+            prepayment_type = "both"
+    if prepayment_type == "both" and amount_c <= 0 and amount_p <= 0 and total_amount > 0:
+        total_principal = float(plan["commercial_amount"]) + float(plan["provident_amount"])
+        ratio_c = float(plan["commercial_amount"]) / total_principal if total_principal > 0 else 0
+        amount_c = total_amount * ratio_c
+        amount_p = total_amount - amount_c
+    return {
+        "prepayment_type": prepayment_type,
+        "amount_commercial": amount_c,
+        "amount_provident": amount_p,
+    }
+
+
+def _normalize_prepayment_method(method) -> str:
+    if method in [PrepaymentMethod.SHORTEN_TERM.value, PrepaymentMethod.REDUCE_PAYMENT.value]:
+        return method
+    if isinstance(method, str):
+        if "缩短" in method:
+            return PrepaymentMethod.SHORTEN_TERM.value
+        if "减少" in method:
+            return PrepaymentMethod.REDUCE_PAYMENT.value
+    return PrepaymentMethod.SHORTEN_TERM.value
 
 
 def generate_plan_schedule_from_events(
@@ -55,6 +103,8 @@ def generate_plan_schedule_from_events(
     repayment_method = plan["repayment_method"]
     start_date = _parse_date(plan["start_date"])
     repayment_day = int(plan.get("repayment_day", 1))
+    if start_date is None:
+        return pd.DataFrame(columns=REPAYMENT_SCHEDULE_COLUMNS)
 
     # 初始本金和利率
     if loan_type == LoanType.COMBINED.value:
@@ -73,20 +123,37 @@ def generate_plan_schedule_from_events(
 
     term_months = int(plan["term_months"])
 
+    # 基础计划（用于映射生效日期到期数）
+    base_schedule = generate_schedule(
+        plan_id, principal, annual_rate, term_months,
+        repayment_method, start_date, repayment_day,
+    )
+
     # 收集所有事件，按期数排序
     events = []
 
     # 添加利率调整事件
+    order = 0
     if rate_adjustments is not None and not rate_adjustments.empty:
         for _, ra in rate_adjustments.iterrows():
-            # 兼容旧数据：如果没有 effective_period，暂时跳过
-            if "effective_period" not in ra or pd.isna(ra["effective_period"]):
-                continue
+            effective_date = _parse_date(ra.get("effective_date"))
+            if effective_date is not None:
+                base_schedule["due_date_dt"] = pd.to_datetime(base_schedule["due_date"])
+                eff_rows = base_schedule[base_schedule["due_date_dt"] >= pd.Timestamp(effective_date)]
+                if eff_rows.empty:
+                    continue
+                period = int(eff_rows.iloc[0]["period"])
+            else:
+                if "effective_period" not in ra or pd.isna(ra["effective_period"]):
+                    continue
+                period = int(ra["effective_period"])
             events.append({
                 "type": "rate_adjustment",
-                "period": int(ra["effective_period"]),
+                "period": period,
                 "data": ra,
+                "_order": order,
             })
+            order += 1
 
     # 添加提前还款事件
     if prepayments is not None and not prepayments.empty:
@@ -98,15 +165,15 @@ def generate_plan_schedule_from_events(
                 "type": "prepayment",
                 "period": int(pp["prepayment_period"]),
                 "data": pp,
+                "_order": order,
             })
+            order += 1
 
     # 按期数排序事件
-    events.sort(key=lambda e: e["period"])
+    events.sort(key=_event_sort_key)
 
     # ========== 组合贷特殊处理：分别维护商贷和公积金两个独立 schedule ==========
     if loan_type == LoanType.COMBINED.value:
-        from core.calculator import generate_schedule
-
         # 生成初始独立计划
         sch_c = generate_schedule(
             plan_id + "_c", commercial_principal, commercial_rate, term_months,
@@ -127,11 +194,12 @@ def generate_plan_schedule_from_events(
 
             if event["type"] == "prepayment":
                 pp = event["data"]
-                prepayment_type = pp.get("prepayment_type")
-                method = pp["method"]
+                normalized = _normalize_combined_prepayment(pp, plan)
+                prepayment_type = normalized["prepayment_type"]
+                method = _normalize_prepayment_method(pp.get("method"))
 
                 if prepayment_type in ["commercial", "both"]:
-                    amount_c = float(pp.get("amount_commercial", 0))
+                    amount_c = float(normalized["amount_commercial"])
                     if amount_c > 0:
                         sch_c, _ = apply_prepayment(
                             plan_id + "_c", sch_c, event_period, amount_c, method,
@@ -139,7 +207,7 @@ def generate_plan_schedule_from_events(
                         )
 
                 if prepayment_type in ["provident", "both"]:
-                    amount_p = float(pp.get("amount_provident", 0))
+                    amount_p = float(normalized["amount_provident"])
                     if amount_p > 0:
                         sch_p, _ = apply_prepayment(
                             plan_id + "_p", sch_p, event_period, amount_p, method,
@@ -149,6 +217,12 @@ def generate_plan_schedule_from_events(
         # 最后合并两个 schedule
         c_by_period = {row["period"]: row for _, row in sch_c.iterrows()}
         p_by_period = {row["period"]: row for _, row in sch_p.iterrows()}
+        last_c = sch_c.iloc[-1] if not sch_c.empty else None
+        last_p = sch_p.iloc[-1] if not sch_p.empty else None
+        last_c_cum_p = float(last_c["cumulative_principal"]) if last_c is not None else 0.0
+        last_c_cum_i = float(last_c["cumulative_interest"]) if last_c is not None else 0.0
+        last_p_cum_p = float(last_p["cumulative_principal"]) if last_p is not None else 0.0
+        last_p_cum_i = float(last_p["cumulative_interest"]) if last_p is not None else 0.0
         all_periods = sorted(set(list(c_by_period.keys()) + list(p_by_period.keys())))
 
         combined_records = []
@@ -163,14 +237,17 @@ def generate_plan_schedule_from_events(
                     record[col] = c_row[col] + p_row[col]
             elif c_row is not None:
                 record = c_row.copy()
+                record["cumulative_principal"] = float(c_row["cumulative_principal"]) + last_p_cum_p
+                record["cumulative_interest"] = float(c_row["cumulative_interest"]) + last_p_cum_i
             else:
                 record = p_row.copy()
+                record["cumulative_principal"] = float(p_row["cumulative_principal"]) + last_c_cum_p
+                record["cumulative_interest"] = float(p_row["cumulative_interest"]) + last_c_cum_i
 
             combined_records.append(record)
 
         schedule = pd.DataFrame(combined_records)
         schedule["applied_rate"] = commercial_rate
-        schedule = schedule.round(2)
         schedule["plan_id"] = plan_id
 
         _mark_is_paid_by_date(schedule)
@@ -178,10 +255,7 @@ def generate_plan_schedule_from_events(
 
     # ========== 普通贷款处理 ==========
     # 第一步：生成初始计划
-    schedule = generate_schedule(
-        plan_id, principal, annual_rate, term_months,
-        repayment_method, start_date, repayment_day,
-    )
+    schedule = base_schedule.copy()
 
     # 依次应用事件
     for event in events:
@@ -200,7 +274,7 @@ def generate_plan_schedule_from_events(
         elif event["type"] == "prepayment":
             pp = event["data"]
             prepay_amount = float(pp["amount"])
-            method = pp["method"]
+            method = _normalize_prepayment_method(pp.get("method"))
 
             # 普通贷款提前还款
             current_row = schedule[schedule["period"] == event_period]
@@ -281,6 +355,12 @@ def generate_single_component_schedule(
     )
 
     if not prepayments.empty:
+        if "prepayment_type" not in prepayments.columns:
+            prepayments = prepayments.copy()
+            prepayments["prepayment_type"] = "both"
+        else:
+            prepayments = prepayments.copy()
+            prepayments["prepayment_type"] = prepayments["prepayment_type"].replace({"combined": "both"})
         relevant_pp = prepayments[
             prepayments["prepayment_type"].isin(target_types)
         ].copy()
@@ -291,7 +371,7 @@ def generate_single_component_schedule(
             for _, pp in relevant_pp.iterrows():
                 event_period = int(pp["prepayment_period"])
                 amount = float(pp.get(amount_key, 0))
-                method = pp["method"]
+                method = _normalize_prepayment_method(pp.get("method"))
 
                 if event_period < 1 or event_period > len(sch):
                     continue

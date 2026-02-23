@@ -41,7 +41,7 @@ def calc_shorten_term(
         new_term = math.ceil(new_principal / old_base)
         new_monthly = old_base + new_principal * r  # 新首月月供
 
-    return max(new_term, 1), round(new_monthly, 2)
+    return max(new_term, 1), new_monthly
 
 
 def calc_reduce_payment(
@@ -64,7 +64,7 @@ def calc_reduce_payment(
         base = new_principal / remaining_term
         new_monthly = base + new_principal * r  # 新首月
 
-    return remaining_term, round(new_monthly, 2)
+    return remaining_term, new_monthly
 
 
 def calc_interest_saved(
@@ -135,7 +135,7 @@ def calc_interest_saved(
             )
 
     saved = original_total_interest - new_total_interest
-    return round(max(saved, 0), 2)
+    return max(saved, 0)
 
 
 def apply_prepayment(
@@ -194,6 +194,7 @@ def apply_prepayment(
     # 累计值
     cum_p = float(paid_part["cumulative_principal"].iloc[-1]) if not paid_part.empty else 0
     cum_i = float(paid_part["cumulative_interest"].iloc[-1]) if not paid_part.empty else 0
+    cum_p += prepay_amount
 
     # 生成新的后续还款计划
     from utils.date_utils import add_months, get_due_date
@@ -245,12 +246,12 @@ def apply_prepayment(
                 "plan_id": plan_id,
                 "period": period,
                 "due_date": due.strftime("%Y-%m-%d"),
-                "monthly_payment": round(payment, 2),
-                "principal": round(prin, 2),
-                "interest": round(interest, 2),
-                "remaining_principal": round(remaining, 2),
-                "cumulative_principal": round(current_cum_p, 2),
-                "cumulative_interest": round(current_cum_i, 2),
+                "monthly_payment": payment,
+                "principal": prin,
+                "interest": interest,
+                "remaining_principal": remaining,
+                "cumulative_principal": current_cum_p,
+                "cumulative_interest": current_cum_i,
                 "applied_rate": annual_rate,
                 "is_paid": False,
                 "actual_pay_date": None,
@@ -272,12 +273,12 @@ def apply_prepayment(
     full_schedule = pd.concat([paid_part, new_schedule], ignore_index=True)
 
     prepay_info = {
-        "remaining_principal_before": round(remaining_before, 2),
-        "remaining_principal_after": round(remaining_after, 2),
+        "remaining_principal_before": remaining_before,
+        "remaining_principal_after": remaining_after,
         "old_term_remaining": old_remaining_term,
         "new_term_remaining": new_term,
-        "old_monthly_payment": round(old_monthly, 2),
-        "new_monthly_payment": round(new_monthly, 2),
+        "old_monthly_payment": old_monthly,
+        "new_monthly_payment": new_monthly,
         "interest_saved": interest_saved,
     }
 
@@ -377,7 +378,7 @@ def apply_combined_prepayment(
         )
     else:
         sch_c_result = sch_c_full.copy()
-        info_c = {"interest_saved": 0, "new_monthly_payment": 0}
+        info_c = {"interest_saved": 0.0, "new_monthly_payment": 0.0}
 
     # 5. 对公积金部分提前还款（如果需要）
     sch_p_result = None
@@ -389,7 +390,7 @@ def apply_combined_prepayment(
         )
     else:
         sch_p_result = sch_p_full.copy()
-        info_p = {"interest_saved": 0, "new_monthly_payment": 0}
+        info_p = {"interest_saved": 0.0, "new_monthly_payment": 0.0}
 
     # 6. 合并两个计划 - 按 period 对齐合并
     # 创建 period 到数据的映射
@@ -421,7 +422,6 @@ def apply_combined_prepayment(
 
     combined = pd.DataFrame(combined_records)
     combined["applied_rate"] = commercial_rate
-    combined = combined.round(2)
     combined["plan_id"] = plan_id
 
     # 7. 汇总信息
@@ -445,18 +445,18 @@ def apply_combined_prepayment(
     new_term_remaining = max(len(sch_c_result), len(sch_p_result)) - prepay_period + 1
 
     prepay_info = {
-        "remaining_principal_before": round(total_rem_before, 2),
-        "remaining_principal_after": round(total_rem_after, 2),
+        "remaining_principal_before": total_rem_before,
+        "remaining_principal_after": total_rem_after,
         "old_term_remaining": old_term_remaining,
         "new_term_remaining": new_term_remaining,
-        "old_monthly_payment": round(old_monthly, 2),
-        "new_monthly_payment": round(new_monthly, 2),
-        "interest_saved": round(total_saved, 2),
+        "old_monthly_payment": old_monthly,
+        "new_monthly_payment": new_monthly,
+        "interest_saved": total_saved,
         "prepayment_type": prepay_type,
-        "amount_commercial": round(amount_commercial, 2),
-        "amount_provident": round(amount_provident, 2),
-        "interest_saved_commercial": round(info_c.get("interest_saved", 0), 2),
-        "interest_saved_provident": round(info_p.get("interest_saved", 0), 2),
+        "amount_commercial": amount_commercial,
+        "amount_provident": amount_provident,
+        "interest_saved_commercial": info_c.get("interest_saved", 0),
+        "interest_saved_provident": info_p.get("interest_saved", 0),
     }
 
     return combined, prepay_info

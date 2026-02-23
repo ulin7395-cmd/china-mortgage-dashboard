@@ -28,6 +28,23 @@ def _default_config_rows() -> List[dict]:
     ]
 
 
+def _ensure_columns(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=columns)
+    missing = [c for c in columns if c not in df.columns]
+    if missing:
+        for col in missing:
+            df[col] = None
+    return df
+
+
+def _append_row(df: pd.DataFrame, record: dict) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame([record], columns=df.columns)
+    df.loc[len(df)] = record
+    return df
+
+
 def init_excel(filepath: Path = EXCEL_FILE):
     """初始化 Excel 文件，创建所有 Sheet 和表头"""
     _ensure_data_dir()
@@ -39,6 +56,8 @@ def init_excel(filepath: Path = EXCEL_FILE):
             writer, sheet_name=SHEET_LOAN_PLANS, index=False)
         pd.DataFrame(columns=RATE_ADJUSTMENTS_COLUMNS).to_excel(
             writer, sheet_name=SHEET_RATE_ADJUSTMENTS, index=False)
+        pd.DataFrame(columns=REPAYMENT_SCHEDULE_COLUMNS).to_excel(
+            writer, sheet_name=SHEET_REPAYMENT_SCHEDULE, index=False)
         pd.DataFrame(columns=PREPAYMENTS_COLUMNS).to_excel(
             writer, sheet_name=SHEET_PREPAYMENTS, index=False)
         config_df = pd.DataFrame(_default_config_rows(), columns=CONFIG_COLUMNS)
@@ -64,6 +83,16 @@ def read_sheet(sheet_name: str, filepath: Path = EXCEL_FILE) -> pd.DataFrame:
         df = pd.read_excel(filepath, sheet_name=sheet_name, engine="openpyxl")
     except ValueError:
         df = pd.DataFrame()
+    if sheet_name == SHEET_LOAN_PLANS:
+        return _ensure_columns(df, LOAN_PLANS_COLUMNS)
+    if sheet_name == SHEET_RATE_ADJUSTMENTS:
+        return _ensure_columns(df, RATE_ADJUSTMENTS_COLUMNS)
+    if sheet_name == SHEET_REPAYMENT_SCHEDULE:
+        return _ensure_columns(df, REPAYMENT_SCHEDULE_COLUMNS)
+    if sheet_name == SHEET_PREPAYMENTS:
+        return _ensure_columns(df, PREPAYMENTS_COLUMNS)
+    if sheet_name == SHEET_CONFIG:
+        return _ensure_columns(df, CONFIG_COLUMNS)
     return df
 
 
@@ -94,11 +123,7 @@ def get_plan_by_id(plan_id: str, filepath: Path = EXCEL_FILE) -> Optional[pd.Ser
     match = df[df["plan_id"] == plan_id]
     if match.empty:
         return None
-    # 确保返回的 Series 有 paid_up_to_period 字段
-    plan = match.iloc[0]
-    if "paid_up_to_period" not in plan or pd.isna(plan["paid_up_to_period"]):
-        plan["paid_up_to_period"] = 0
-    return plan
+    return match.iloc[0].copy()
 
 
 def save_plan(plan_dict: dict, filepath: Path = EXCEL_FILE):
@@ -109,8 +134,7 @@ def save_plan(plan_dict: dict, filepath: Path = EXCEL_FILE):
             if col in df.columns:
                 df.loc[df["plan_id"] == plan_dict["plan_id"], col] = plan_dict[col]
     else:
-        new_row = pd.DataFrame([plan_dict])
-        df = pd.concat([df, new_row], ignore_index=True)
+        df = _append_row(df, plan_dict)
     write_sheet(df, SHEET_LOAN_PLANS, filepath)
 
 
@@ -139,24 +163,7 @@ def save_repayment_schedule(plan_id: str, records: pd.DataFrame, filepath: Path 
     pass
 
 
-def mark_period_paid(plan_id: str, period: int, pay_date: Optional[str] = None, filepath: Path = EXCEL_FILE):
-    """标记还款至某一期（更新方案中的 paid_up_to_period 字段）"""
-    df = get_all_plans(filepath)
-    mask = df["plan_id"] == plan_id
-    if mask.any():
-        # 确保 paid_up_to_period 列存在
-        if "paid_up_to_period" not in df.columns:
-            df["paid_up_to_period"] = 0
-        df.loc[mask, "paid_up_to_period"] = period
-        write_sheet(df, SHEET_LOAN_PLANS, filepath)
-
-
-def get_paid_up_to_period(plan_id: str, filepath: Path = EXCEL_FILE) -> int:
-    """获取已还至第几期"""
-    plan = get_plan_by_id(plan_id, filepath)
-    if plan is not None and "paid_up_to_period" in plan and pd.notna(plan["paid_up_to_period"]):
-        return int(plan["paid_up_to_period"])
-    return 0
+ 
 
 
 # ---- 利率调整 ----
@@ -168,7 +175,7 @@ def get_rate_adjustments(plan_id: str, filepath: Path = EXCEL_FILE) -> pd.DataFr
 
 def save_rate_adjustment(record: dict, filepath: Path = EXCEL_FILE):
     df = read_sheet(SHEET_RATE_ADJUSTMENTS, filepath)
-    df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
+    df = _append_row(df, record)
     write_sheet(df, SHEET_RATE_ADJUSTMENTS, filepath)
 
 
@@ -181,8 +188,22 @@ def get_prepayments(plan_id: str, filepath: Path = EXCEL_FILE) -> pd.DataFrame:
 
 def save_prepayment(record: dict, filepath: Path = EXCEL_FILE):
     df = read_sheet(SHEET_PREPAYMENTS, filepath)
-    df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
+    df = _append_row(df, record)
     write_sheet(df, SHEET_PREPAYMENTS, filepath)
+
+
+def update_prepayment(prepayment_id: str, updates: dict, filepath: Path = EXCEL_FILE) -> bool:
+    df = read_sheet(SHEET_PREPAYMENTS, filepath)
+    if df.empty or "prepayment_id" not in df.columns:
+        return False
+    mask = df["prepayment_id"] == prepayment_id
+    if not mask.any():
+        return False
+    for col, val in updates.items():
+        if col in df.columns:
+            df.loc[mask, col] = val
+    write_sheet(df, SHEET_PREPAYMENTS, filepath)
+    return True
 
 
 # ---- 系统配置 ----
@@ -202,6 +223,7 @@ def get_all_config(filepath: Path = EXCEL_FILE) -> pd.DataFrame:
 
 def set_config(key: str, value: str, description: str = "", filepath: Path = EXCEL_FILE):
     df = read_sheet(SHEET_CONFIG, filepath)
+    df["value"] = df["value"].astype(str)
     now = datetime.now().isoformat()
     if key in df["key"].values:
         df.loc[df["key"] == key, "value"] = value
@@ -209,9 +231,9 @@ def set_config(key: str, value: str, description: str = "", filepath: Path = EXC
         if description:
             df.loc[df["key"] == key, "description"] = description
     else:
-        new_row = pd.DataFrame([{
+        new_row = {
             "key": key, "value": value,
             "description": description, "updated_at": now,
-        }])
-        df = pd.concat([df, new_row], ignore_index=True)
+        }
+        df = _append_row(df, new_row)
     write_sheet(df, SHEET_CONFIG, filepath)

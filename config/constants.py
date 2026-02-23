@@ -70,7 +70,7 @@ LOAN_PLANS_COLUMNS = [
     "plan_id", "plan_name", "loan_type", "total_amount",
     "commercial_amount", "provident_amount", "term_months",
     "repayment_method", "commercial_rate", "provident_rate",
-    "start_date", "repayment_day", "status", "notes", "paid_up_to_period",
+    "start_date", "repayment_day", "status", "notes",
 ]
 
 RATE_ADJUSTMENTS_COLUMNS = [
@@ -90,7 +90,7 @@ PREPAYMENTS_COLUMNS = [
     "method", "remaining_principal_before", "remaining_principal_after",
     "old_term_remaining", "new_term_remaining",
     "old_monthly_payment", "new_monthly_payment", "interest_saved",
-    "prepayment_type",  # 新增：组合贷时指定还商贷还是公积金，可选 "commercial" / "provident" / "combined"
+    "prepayment_type", "amount_commercial", "amount_provident",
 ]
 
 CONFIG_COLUMNS = ["key", "value", "description", "updated_at"]
