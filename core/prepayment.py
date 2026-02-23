@@ -196,15 +196,78 @@ def apply_prepayment(
     cum_i = float(paid_part["cumulative_interest"].iloc[-1]) if not paid_part.empty else 0
 
     # 生成新的后续还款计划
-    from utils.date_utils import add_months
+    from utils.date_utils import add_months, get_due_date
+    from config.constants import REPAYMENT_SCHEDULE_COLUMNS
+
     new_start = add_months(start_date, prepay_period - 1)
-    new_schedule = generate_schedule(
-        plan_id, remaining_after, annual_rate, new_term,
-        repayment_method, new_start, repayment_day,
-        start_period=prepay_period,
-        existing_cumulative_principal=cum_p,
-        existing_cumulative_interest=cum_i,
-    )
+
+    # ========== 等额本金+缩短年限特殊处理：保持每月本金不变 ==========
+    if (repayment_method == RepaymentMethod.EQUAL_PRINCIPAL.value
+        and method == PrepaymentMethod.SHORTEN_TERM.value
+        and len(schedule) > 0):
+
+        # 获取原来的每月本金（从第一期获取最准确）
+        original_base_principal = float(schedule.iloc[0]["principal"])
+
+        # 用剩余本金和原来的每月本金计算新期限
+        new_term = max(1, int(remaining_after / original_base_principal))
+        # 向上取整修正
+        if remaining_after - new_term * original_base_principal > 0.01:
+            new_term += 1
+
+        r = annual_rate / 100 / 12
+        remaining = remaining_after
+        current_cum_p = cum_p
+        current_cum_i = cum_i
+
+        records = []
+        for i in range(new_term):
+            period = prepay_period + i
+            due = get_due_date(start_date, prepay_period + i, repayment_day)
+
+            # 每月本金保持不变，最后一期调整
+            if i == new_term - 1:
+                prin = remaining
+            else:
+                prin = original_base_principal
+
+            interest = remaining * r if r > 0 else 0
+            payment = prin + interest
+
+            remaining -= prin
+            if remaining < 0.005:
+                remaining = 0.0
+
+            current_cum_p += prin
+            current_cum_i += interest
+
+            records.append({
+                "plan_id": plan_id,
+                "period": period,
+                "due_date": due.strftime("%Y-%m-%d"),
+                "monthly_payment": round(payment, 2),
+                "principal": round(prin, 2),
+                "interest": round(interest, 2),
+                "remaining_principal": round(remaining, 2),
+                "cumulative_principal": round(current_cum_p, 2),
+                "cumulative_interest": round(current_cum_i, 2),
+                "applied_rate": annual_rate,
+                "is_paid": False,
+                "actual_pay_date": None,
+            })
+
+        new_schedule = pd.DataFrame(records, columns=REPAYMENT_SCHEDULE_COLUMNS)
+        new_monthly = float(new_schedule.iloc[0]["monthly_payment"]) if len(new_schedule) > 0 else 0
+
+    else:
+        # 其他情况用正常方式生成
+        new_schedule = generate_schedule(
+            plan_id, remaining_after, annual_rate, new_term,
+            repayment_method, new_start, repayment_day,
+            start_period=prepay_period,
+            existing_cumulative_principal=cum_p,
+            existing_cumulative_interest=cum_i,
+        )
 
     full_schedule = pd.concat([paid_part, new_schedule], ignore_index=True)
 
@@ -245,6 +308,8 @@ def apply_combined_prepayment(
     method: str,
     start_date: date,
     repayment_day: int,
+    sch_c_current: Optional[pd.DataFrame] = None,
+    sch_p_current: Optional[pd.DataFrame] = None,
 ) -> Tuple[pd.DataFrame, Dict]:
     """
     组合贷提前还款：分别处理商贷和公积金部分，然后合并
@@ -269,25 +334,28 @@ def apply_combined_prepayment(
     # 已还部分保留
     paid_part = schedule[schedule["period"] < prepay_period].copy()
 
-    # 先分别获取到 prepay_period 时的商贷和公积金状态
-    # 方法：重新生成两部分到 prepay_period 前的计划
-    commercial_principal_initial = float(plan["commercial_amount"])
-    provident_principal_initial = float(plan["provident_amount"])
     commercial_rate = float(plan["commercial_rate"])
     provident_rate = float(plan["provident_rate"])
     repayment_method = plan["repayment_method"]
     term_months = int(plan["term_months"])
 
-    # 1. 生成商贷完整计划，取到 prepay_period 时的状态
-    sch_c_full = generate_schedule(
-        plan_id + "_c", commercial_principal_initial, commercial_rate, term_months,
-        repayment_method, start_date, repayment_day
-    )
-    # 2. 生成公积金完整计划
-    sch_p_full = generate_schedule(
-        plan_id + "_p", provident_principal_initial, provident_rate, term_months,
-        repayment_method, start_date, repayment_day
-    )
+    # 使用外部传入的事件感知 schedule（包含历史提前还款），或从原始参数生成
+    if sch_c_current is not None:
+        sch_c_full = sch_c_current
+    else:
+        commercial_principal_initial = float(plan["commercial_amount"])
+        sch_c_full = generate_schedule(
+            plan_id + "_c", commercial_principal_initial, commercial_rate, term_months,
+            repayment_method, start_date, repayment_day
+        )
+    if sch_p_current is not None:
+        sch_p_full = sch_p_current
+    else:
+        provident_principal_initial = float(plan["provident_amount"])
+        sch_p_full = generate_schedule(
+            plan_id + "_p", provident_principal_initial, provident_rate, term_months,
+            repayment_method, start_date, repayment_day
+        )
 
     # 3. 找到 prepay_period 时的剩余本金
     if prepay_period == 1:
@@ -373,7 +441,7 @@ def apply_combined_prepayment(
         old_monthly += float(sch_p_full[sch_p_full["period"] == prepay_period].iloc[0]["monthly_payment"])
         new_monthly += float(row_p.iloc[0]["monthly_payment"])
 
-    old_term_remaining = term_months - prepay_period + 1
+    old_term_remaining = max(len(sch_c_full), len(sch_p_full)) - prepay_period + 1
     new_term_remaining = max(len(sch_c_result), len(sch_p_result)) - prepay_period + 1
 
     prepay_info = {

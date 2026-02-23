@@ -28,16 +28,38 @@ def calc_real_cost(
     total_interest: float,
     term_months: int,
     annual_inflation_rate: float = DEFAULT_INFLATION_RATE,
+    annual_rate: float = None,
+    monthly_payments: list = None,
 ) -> dict:
-    """计算考虑通胀后的实际成本"""
+    """计算考虑通胀后的实际成本
+
+    Args:
+        total_payment: 名义总还款额
+        total_interest: 总利息
+        term_months: 还款期数
+        annual_inflation_rate: 年通胀率(%)
+        annual_rate: 年化名义利率(%)，用于 Fisher 方程计算实际利率
+        monthly_payments: 每期实际月供序列，用于精确 PV 计算（等额本金时有差异）
+    """
     monthly_rate = annual_inflation_rate / 100 / 12
 
-    # 名义总还款额的现值
-    # 简化：假设等额还款
-    avg_monthly = total_payment / term_months if term_months > 0 else 0
-    pv = sum(avg_monthly / (1 + monthly_rate) ** i for i in range(1, term_months + 1))
+    # PV 计算：优先用实际月供序列，否则用平均值近似
+    if monthly_payments is not None and len(monthly_payments) > 0:
+        pv = sum(p / (1 + monthly_rate) ** (i + 1) for i, p in enumerate(monthly_payments))
+    else:
+        avg_monthly = total_payment / term_months if term_months > 0 else 0
+        pv = sum(avg_monthly / (1 + monthly_rate) ** i for i in range(1, term_months + 1))
 
-    nominal_rate = total_interest / (total_payment - total_interest) * 100 if total_payment > total_interest else 0
+    # 名义利率：优先用传入的年利率，否则从总利息/本金简单年化近似
+    if annual_rate is not None:
+        nominal_rate = annual_rate
+    else:
+        principal = total_payment - total_interest
+        if principal > 0 and term_months > 0:
+            nominal_rate = total_interest / principal / (term_months / 12) * 100
+        else:
+            nominal_rate = 0
+
     real_rate = ((1 + nominal_rate / 100) / (1 + annual_inflation_rate / 100) - 1) * 100
 
     return {

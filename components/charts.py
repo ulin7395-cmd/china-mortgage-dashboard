@@ -93,8 +93,10 @@ def create_monthly_payment_line(
 
     # 标注提前还款点
     if prepayment_periods:
+        period_to_idx = {int(row["period"]): idx for idx, (_, row) in enumerate(schedule.iterrows())}
         pp_data = schedule[schedule["period"].isin(prepayment_periods)]
-        pp_x_labels = [x_labels[int(p)-1] for p in pp_data["period"]]
+        pp_x_labels = [x_labels[period_to_idx[int(p)]] for p in pp_data["period"] if int(p) in period_to_idx]
+        pp_data = pp_data[pp_data["period"].apply(lambda p: int(p) in period_to_idx)]
         fig.add_trace(go.Scatter(
             x=pp_x_labels,
             y=pp_data["monthly_payment"],
@@ -105,8 +107,10 @@ def create_monthly_payment_line(
 
     # 标注利率调整点
     if rate_change_periods:
+        period_to_idx = {int(row["period"]): idx for idx, (_, row) in enumerate(schedule.iterrows())}
         rc_data = schedule[schedule["period"].isin(rate_change_periods)]
-        rc_x_labels = [x_labels[int(p)-1] for p in rc_data["period"]]
+        rc_x_labels = [x_labels[period_to_idx[int(p)]] for p in rc_data["period"] if int(p) in period_to_idx]
+        rc_data = rc_data[rc_data["period"].apply(lambda p: int(p) in period_to_idx)]
         fig.add_trace(go.Scatter(
             x=rc_x_labels,
             y=rc_data["monthly_payment"],
@@ -172,7 +176,7 @@ def create_stacked_area(schedule: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def create_remaining_principal_line(schedule: pd.DataFrame) -> go.Figure:
+def create_remaining_principal_line(schedule: pd.DataFrame, prepayment_periods: list = None) -> go.Figure:
     """剩余本金下降曲线"""
     fig = go.Figure()
     x_labels = _get_x_labels(schedule)
@@ -187,6 +191,20 @@ def create_remaining_principal_line(schedule: pd.DataFrame) -> go.Figure:
         fillcolor="rgba(31, 119, 180, 0.15)",
         hovertemplate="%{x}<br>剩余本金: %{y:,.2f}元<extra></extra>",
     ))
+
+    # 标注提前还款点
+    if prepayment_periods:
+        period_to_idx = {int(row["period"]): idx for idx, (_, row) in enumerate(schedule.iterrows())}
+        pp_data = schedule[schedule["period"].isin(prepayment_periods)]
+        pp_x_labels = [x_labels[period_to_idx[int(p)]] for p in pp_data["period"] if int(p) in period_to_idx]
+        pp_data = pp_data[pp_data["period"].apply(lambda p: int(p) in period_to_idx)]
+        fig.add_trace(go.Scatter(
+            x=pp_x_labels,
+            y=pp_data["remaining_principal"],
+            mode="markers",
+            name="提前还款",
+            marker=dict(color=COLORS["danger"], size=12, symbol="star"),
+        ))
 
     fig.update_layout(
         title="剩余本金变化",

@@ -95,7 +95,10 @@ with tab_plans:
                     total_payment = sch["monthly_payment"].sum()
                     total_interest = sch["interest"].sum()
                     term = len(sch)
-                    real = calc_real_cost(total_payment, total_interest, term, inflation_rate)
+                    annual_rate = float(sch.iloc[0]["applied_rate"])
+                    monthly_payments = sch["monthly_payment"].tolist()
+                    real = calc_real_cost(total_payment, total_interest, term, inflation_rate,
+                                          annual_rate=annual_rate, monthly_payments=monthly_payments)
                     with st.expander(f"**{p['plan_name']}**"):
                         c1, c2, c3 = st.columns(3)
                         c1.metric("名义总还款", fmt_amount(real["nominal_total_payment"]))

@@ -2,10 +2,10 @@
 import streamlit as st
 import pandas as pd
 
-from data_manager.excel_handler import get_all_plans, mark_period_paid, get_paid_up_to_period
+from data_manager.excel_handler import get_all_plans, get_prepayments
 from core.schedule_generator import get_plan_schedule
 from components.tables import render_repayment_table
-from components.charts import create_stacked_area, create_remaining_principal_line
+from components.charts import create_stacked_area, create_remaining_principal_line, create_monthly_payment_line
 from core.calculator import calc_remaining_irr
 from utils.formatters import fmt_amount, fmt_percent, fmt_rate
 
@@ -29,6 +29,12 @@ if schedule.empty:
     st.warning("该方案暂无还款计划。")
     st.stop()
 
+# 获取提前还款记录
+prepayments = get_prepayments(plan_id)
+prepayment_periods = []
+if not prepayments.empty:
+    prepayment_periods = prepayments["prepayment_period"].astype(int).tolist()
+
 # 确保数值类型
 for col in ["monthly_payment", "principal", "interest", "remaining_principal",
             "cumulative_principal", "cumulative_interest"]:
@@ -42,7 +48,11 @@ total_amount = float(plan["total_amount"])
 paid_mask = schedule["is_paid"] == True
 paid_principal = schedule.loc[paid_mask, "principal"].sum()
 paid_interest = schedule.loc[paid_mask, "interest"].sum()
-unpaid_principal = schedule.loc[~paid_mask, "principal"].sum()
+unpaid_sch = schedule[~paid_mask]
+if not unpaid_sch.empty:
+    unpaid_principal = float(unpaid_sch.iloc[0]["remaining_principal"]) + float(unpaid_sch.iloc[0]["principal"])
+else:
+    unpaid_principal = 0
 unpaid_interest = schedule.loc[~paid_mask, "interest"].sum()
 total_interest = schedule["interest"].sum()
 
@@ -67,28 +77,21 @@ remaining_principal = float(remaining_schedule.iloc[0]["remaining_principal"] + 
 remaining_irr = calc_remaining_irr(remaining_principal, remaining_schedule)
 c8.metric("剩余年化率(IRR)", fmt_rate(remaining_irr))
 
+# 提前还款信息
+if prepayment_periods:
+    st.info(f"💡 已记录 {len(prepayment_periods)} 次提前还款，发生在第 {', '.join([str(p) for p in prepayment_periods])} 期")
+
 st.divider()
 
-# 标记已还
-st.subheader("标记还款")
-paid_up_to = get_paid_up_to_period(plan_id)
-all_periods = list(range(0, total_periods + 1))  # 0 表示未还任何期
-
-col_a, col_b = st.columns([3, 1])
-with col_a:
-    default_idx = all_periods.index(paid_up_to) if paid_up_to in all_periods else 0
-    mark_up_to = st.selectbox(
-        "标记已还至第N期（0表示未还任何期）",
-        options=all_periods,
-        index=default_idx,
-    )
-with col_b:
-    st.write("")
-    st.write("")
-    if st.button("确认标记", type="primary"):
-        mark_period_paid(plan_id, mark_up_to)
-        st.success(f"已标记至第 {mark_up_to} 期")
-        st.rerun()
+# 图表
+st.subheader("还款趋势")
+col1, col2 = st.columns(2)
+with col1:
+    fig_line = create_monthly_payment_line(schedule, prepayment_periods, [])
+    st.plotly_chart(fig_line, width='stretch')
+with col2:
+    fig_remaining = create_remaining_principal_line(schedule, prepayment_periods)
+    st.plotly_chart(fig_remaining, width='stretch')
 
 st.divider()
 

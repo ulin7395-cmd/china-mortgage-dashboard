@@ -254,19 +254,12 @@ def render_prepayment_form(
             amount_commercial = None
             amount_provident = None
 
-            c1, c2 = st.columns(2)
-            with c1:
-                amount = st.number_input(
-                    "提前还款金额(元)", min_value=10000.0,
-                    max_value=remaining_principal - 1,
-                    value=min(100000.0, remaining_principal - 1),
-                    step=10000.0, key=f"{key_prefix}_amount",
-                )
-            with c2:
-                prepay_date = st.date_input(
-                    "还款日期", value=date.today(),
-                    key=f"{key_prefix}_date",
-                )
+            amount = st.number_input(
+                "提前还款金额(元)", min_value=10000.0,
+                max_value=remaining_principal - 1,
+                value=min(100000.0, remaining_principal - 1),
+                step=10000.0, key=f"{key_prefix}_amount",
+            )
 
         method = st.radio(
             "还款方式",
