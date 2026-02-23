@@ -141,94 +141,93 @@ def render_schedule_module(
     scope: str = "combined",
 ):
     """渲染单个贷款模块的统计和图表"""
-    st.subheader(title)
+    with st.container(border=True):
+        st.subheader(title)
 
-    # 确保数值类型
-    for col in ["monthly_payment", "principal", "interest", "remaining_principal",
-                "cumulative_principal", "cumulative_interest"]:
-        sch[col] = pd.to_numeric(sch[col], errors="coerce").fillna(0)
+        # 获取当前主题
+        theme_base = st.get_option("theme.base")
+        template = "loan_dashboard_dark" if theme_base == "dark" else "loan_dashboard_light"
 
-    sch["is_paid"] = sch["is_paid"].astype(bool)
+        # 确保数值类型
+        for col in ["monthly_payment", "principal", "interest", "remaining_principal",
+                    "cumulative_principal", "cumulative_interest"]:
+            sch[col] = pd.to_numeric(sch[col], errors="coerce").fillna(0)
 
-    # 计算统计数据
-    # 贷款总额使用传入的原始本金（如果有），否则从第一期反推
-    if original_principal is not None:
-        total_principal = original_principal
-    else:
-        # 从第一期反推原始本金
-        if len(sch) > 0:
-            total_principal = float(sch.iloc[0]["remaining_principal"]) + float(sch.iloc[0]["principal"])
+        sch["is_paid"] = sch["is_paid"].astype(bool)
+
+        # 计算统计数据
+        if original_principal is not None:
+            total_principal = original_principal
         else:
-            total_principal = 0
+            if len(sch) > 0:
+                total_principal = float(sch.iloc[0]["remaining_principal"]) + float(sch.iloc[0]["principal"])
+            else:
+                total_principal = 0
 
-    total_interest = sch["interest"].sum()
-    total_payment = sch["monthly_payment"].sum()
+        total_interest = sch["interest"].sum()
+        
+        paid_mask = sch["is_paid"] == True
+        paid_principal = sch.loc[paid_mask, "principal"].sum()
+        paid_principal += _sum_prepayment_amount(prepayments, scope)
+        paid_interest = sch.loc[paid_mask, "interest"].sum()
 
-    paid_mask = sch["is_paid"] == True
-    paid_principal = sch.loc[paid_mask, "principal"].sum()
-    paid_principal += _sum_prepayment_amount(prepayments, scope)
-    paid_interest = sch.loc[paid_mask, "interest"].sum()
+        if len(sch) > 0 and not paid_mask.all():
+            first_unpaid = sch[~paid_mask].iloc[0]
+            unpaid_principal = float(first_unpaid["remaining_principal"]) + float(first_unpaid["principal"])
+        else:
+            unpaid_principal = 0
 
-    # 未还本金从剩余本金反推，比直接求和更准确
-    if len(sch) > 0 and not paid_mask.all():
-        first_unpaid = sch[~paid_mask].iloc[0]
-        unpaid_principal = float(first_unpaid["remaining_principal"]) + float(first_unpaid["principal"])
-    else:
-        unpaid_principal = 0
+        unpaid_interest = sch.loc[~paid_mask, "interest"].sum()
 
-    unpaid_interest = sch.loc[~paid_mask, "interest"].sum()
+        paid_periods = int(paid_mask.sum())
+        total_periods = len(sch)
+        remaining_periods = total_periods - paid_periods
+        paid_ratio = paid_principal / total_principal if total_principal > 0 else 0
 
-    paid_periods = int(paid_mask.sum())
-    total_periods = len(sch)
-    remaining_periods = total_periods - paid_periods
-    paid_ratio = paid_principal / total_principal if total_principal > 0 else 0
+        unpaid_sch = sch[~paid_mask]
+        current_monthly = float(unpaid_sch.iloc[0]["monthly_payment"]) if not unpaid_sch.empty else 0
 
-    # 当前月供
-    unpaid_sch = sch[~paid_mask]
-    current_monthly = float(unpaid_sch.iloc[0]["monthly_payment"]) if not unpaid_sch.empty else 0
+        # 概览指标
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("贷款总额", fmt_amount(total_principal))
+        c2.metric("当前月供", fmt_amount(current_monthly))
+        c3.metric("已还比例", fmt_percent(paid_ratio))
+        c4.metric("剩余期数", fmt_months(remaining_periods))
 
-    # 概览指标
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("贷款总额", fmt_amount(total_principal))
-    c2.metric("当前月供", fmt_amount(current_monthly))
-    c3.metric("已还比例", fmt_percent(paid_ratio))
-    c4.metric("剩余期数", fmt_months(remaining_periods))
+        c5, c6, c7 = st.columns(3)
+        c5.metric("总利息", fmt_amount(total_interest))
+        c6.metric("已还本金", fmt_amount(paid_principal))
+        c7.metric("已还利息", fmt_amount(paid_interest))
 
-    c5, c6, c7 = st.columns(3)
-    c5.metric("总利息", fmt_amount(total_interest))
-    c6.metric("已还本金", fmt_amount(paid_principal))
-    c7.metric("已还利息", fmt_amount(paid_interest))
+        if prepayment_periods:
+            st.info(f"💡 已记录 {len(prepayment_periods)} 次提前还款，发生在第 {', '.join([str(p) for p in prepayment_periods])} 期")
 
-    # 显示提前还款信息
-    if prepayment_periods:
-        st.info(f"💡 已记录 {len(prepayment_periods)} 次提前还款，发生在第 {', '.join([str(p) for p in prepayment_periods])} 期")
+        # 图表
+        st.markdown("---")
+        col1, col2 = st.columns(2)
 
-    # 图表
-    col1, col2 = st.columns(2)
+        with col1:
+            fig_pie = create_principal_interest_pie(
+                paid_principal, paid_interest, unpaid_principal, unpaid_interest, template=template
+            )
+            st.plotly_chart(fig_pie, use_container_width=True, key=f"{prefix}_pie")
 
-    with col1:
-        fig_pie = create_principal_interest_pie(
-            paid_principal, paid_interest, unpaid_principal, unpaid_interest,
-        )
-        st.plotly_chart(fig_pie, width='stretch', key=f"{prefix}_pie")
+        with col2:
+            fig_line = create_monthly_payment_line(sch, prepayment_periods, [], template=template)
+            st.plotly_chart(fig_line, use_container_width=True, key=f"{prefix}_line")
 
-    with col2:
-        fig_line = create_monthly_payment_line(sch, prepayment_periods, [])
-        st.plotly_chart(fig_line, width='stretch', key=f"{prefix}_line")
+        col3, col4 = st.columns(2)
 
-    col3, col4 = st.columns(2)
+        with col3:
+            fig_area = create_stacked_area(sch, template=template)
+            st.plotly_chart(fig_area, use_container_width=True, key=f"{prefix}_area")
 
-    with col3:
-        fig_area = create_stacked_area(sch)
-        st.plotly_chart(fig_area, width='stretch', key=f"{prefix}_area")
+        with col4:
+            fig_remaining = create_remaining_principal_line(sch, prepayment_periods, template=template)
+            st.plotly_chart(fig_remaining, use_container_width=True, key=f"{prefix}_remaining")
 
-    with col4:
-        fig_remaining = create_remaining_principal_line(sch, prepayment_periods)
-        st.plotly_chart(fig_remaining, width='stretch', key=f"{prefix}_remaining")
-
-    # 累计还款
-    fig_cum = create_cumulative_chart(sch)
-    st.plotly_chart(fig_cum, width='stretch', key=f"{prefix}_cum")
+        fig_cum = create_cumulative_chart(sch, template=template)
+        st.plotly_chart(fig_cum, use_container_width=True, key=f"{prefix}_cum")
 
 
 # 渲染各模块

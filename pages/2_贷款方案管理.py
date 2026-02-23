@@ -44,38 +44,37 @@ with tab_list:
             method_label = RepaymentMethod(plan["repayment_method"]).label if plan["repayment_method"] in [e.value for e in RepaymentMethod] else plan["repayment_method"]
             status_label = PlanStatus(plan["status"]).label if plan.get("status") in [e.value for e in PlanStatus] else "还款中"
 
-            with st.expander(f"**{plan['plan_name']}** | {loan_type_label} | {fmt_amount(plan['total_amount'])} | {status_label}"):
-                c1, c2, c3 = st.columns(3)
-                c1.write(f"**贷款类型:** {loan_type_label}")
-                c1.write(f"**还款方式:** {method_label}")
-                c1.write(f"**贷款总额:** {fmt_amount(plan['total_amount'])}")
+            with st.container(border=True):
+                col_info, col_actions = st.columns([4, 1])
+                with col_info:
+                    st.subheader(plan['plan_name'])
+                    
+                    c1, c2, c3 = st.columns(3)
+                    c1.write(f"**贷款类型:** {loan_type_label}")
+                    c1.write(f"**还款方式:** {method_label}")
+                    c1.write(f"**贷款总额:** {fmt_amount(plan['total_amount'])}")
 
-                c2.write(f"**贷款期限:** {int(plan['term_months'])}个月 ({int(plan['term_months'])//12}年)")
-                c2.write(f"**起始日期:** {plan['start_date']}")
-                c2.write(f"**还款日:** 每月{int(plan['repayment_day'])}日")
+                    c2.write(f"**贷款期限:** {int(plan['term_months'])}个月 ({int(plan['term_months'])//12}年)")
+                    c2.write(f"**起始日期:** {plan['start_date']}")
+                    c2.write(f"**还款日:** 每月{int(plan['repayment_day'])}日")
 
-                if plan["loan_type"] == LoanType.COMBINED.value:
-                    c3.write(f"**商贷金额:** {fmt_amount(plan['commercial_amount'])}")
-                    c3.write(f"**公积金金额:** {fmt_amount(plan['provident_amount'])}")
-                    c3.write(f"**商贷利率:** {plan['commercial_rate']:.2f}% | 公积金利率: {plan['provident_rate']:.2f}%")
-                elif plan["loan_type"] == LoanType.COMMERCIAL.value:
-                    c3.write(f"**商贷利率:** {plan['commercial_rate']:.2f}%")
-                else:
-                    c3.write(f"**公积金利率:** {plan['provident_rate']:.2f}%")
+                    if plan["loan_type"] == LoanType.COMBINED.value:
+                        c3.write(f"**商贷金额:** {fmt_amount(plan['commercial_amount'])}")
+                        c3.write(f"**公积金金额:** {fmt_amount(plan['provident_amount'])}")
+                        c3.write(f"**商贷利率:** {plan['commercial_rate']:.2f}%")
+                        c3.write(f"**公积金利率:** {plan['provident_rate']:.2f}%")
+                    elif plan["loan_type"] == LoanType.COMMERCIAL.value:
+                        c3.write(f"**商贷利率:** {plan['commercial_rate']:.2f}%")
+                    else:
+                        c3.write(f"**公积金利率:** {plan['provident_rate']:.2f}%")
 
-                if plan.get("notes"):
-                    st.write(f"**备注:** {plan['notes']}")
+                    if plan.get("notes"):
+                        st.write(f"**备注:** {plan['notes']}")
 
-                col_btn1, col_btn2 = st.columns(2)
-                with col_btn1:
-                    if st.button(f"编辑方案", key=f"edit_{plan['plan_id']}", type="primary"):
-                        st.session_state["editing_plan_id"] = plan["plan_id"]
-                        st.rerun()
-                with col_btn2:
-                    if st.button(f"删除方案", key=f"del_{plan['plan_id']}", type="secondary"):
-                        delete_plan(plan["plan_id"])
-                        st.success("方案已删除")
-                        st.rerun()
+                with col_actions:
+                    st.write(f"**状态:** {status_label}")
+                    st.button("编辑", key=f"edit_{plan['plan_id']}", type="primary", on_click=lambda p=plan['plan_id']: st.session_state.update(editing_plan_id=p))
+                    st.button("删除", key=f"del_{plan['plan_id']}", type="secondary", on_click=lambda p=plan['plan_id']: delete_plan(p) and st.rerun())
 
 with tab_new:
     # 检查是否在编辑模式

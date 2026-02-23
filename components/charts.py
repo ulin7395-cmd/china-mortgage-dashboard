@@ -3,7 +3,73 @@ import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 
+import plotly.io as pio
 from config.settings import COLORS
+
+# 自定义 Plotly 主题
+pio.templates["loan_dashboard_light"] = go.layout.Template(
+    layout=go.Layout(
+        font=dict(family="sans-serif", color="#333"),
+        title_font=dict(size=20, color="#333"),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            gridcolor="#e0e0e0",
+            linecolor="#e0e0e0",
+            zerolinecolor="#e0e0e0",
+            tickfont=dict(color="#666"),
+            title_font=dict(color="#666"),
+        ),
+        yaxis=dict(
+            gridcolor="#e0e0e0",
+            linecolor="#e0e0e0",
+            zerolinecolor="#e0e0e0",
+            tickfont=dict(color="#666"),
+            title_font=dict(color="#666"),
+        ),
+        legend=dict(
+            font=dict(color="#666"),
+            bgcolor="rgba(255,255,255,0.5)",
+            bordercolor="#e0e0e0",
+            borderwidth=1,
+        ),
+        colorway=px.colors.qualitative.Plotly,
+    )
+)
+
+pio.templates["loan_dashboard_dark"] = go.layout.Template(
+    layout=go.Layout(
+        font=dict(family="sans-serif", color="#fafafa"),
+        title_font=dict(size=20, color="#fafafa"),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            gridcolor="#444",
+            linecolor="#444",
+            zerolinecolor="#444",
+            tickfont=dict(color="#aaa"),
+            title_font=dict(color="#aaa"),
+        ),
+        yaxis=dict(
+            gridcolor="#444",
+            linecolor="#444",
+            zerolinecolor="#444",
+            tickfont=dict(color="#aaa"),
+            title_font=dict(color="#aaa"),
+        ),
+        legend=dict(
+            font=dict(color="#aaa"),
+            bgcolor="rgba(0,0,0,0.5)",
+            bordercolor="#444",
+            borderwidth=1,
+        ),
+        colorway=px.colors.qualitative.Plotly,
+    )
+)
+
+# 设置默认主题
+pio.templates.default = "loan_dashboard_light"
+
 
 
 def _get_x_labels(schedule: pd.DataFrame) -> list:
@@ -30,6 +96,7 @@ def create_pie_chart(
     title: str = "",
     colors: list = None,
     hole: float = 0.45,
+    template: str = "loan_dashboard_light",
 ) -> go.Figure:
     """环形图"""
     fig = go.Figure(data=[go.Pie(
@@ -45,6 +112,7 @@ def create_pie_chart(
         showlegend=True,
         margin=dict(t=60, b=20, l=20, r=20),
         height=380,
+        template=template,
     )
     return fig
 
@@ -54,6 +122,7 @@ def create_principal_interest_pie(
     paid_interest: float,
     unpaid_principal: float,
     unpaid_interest: float,
+    template: str = "loan_dashboard_light",
 ) -> go.Figure:
     """已还/未还本金利息环形图"""
     fig = go.Figure(data=[go.Pie(
@@ -69,6 +138,7 @@ def create_principal_interest_pie(
         showlegend=True,
         margin=dict(t=60, b=20, l=20, r=20),
         height=400,
+        template=template,
     )
     return fig
 
@@ -77,6 +147,7 @@ def create_monthly_payment_line(
     schedule: pd.DataFrame,
     prepayment_periods: list = None,
     rate_change_periods: list = None,
+    template: str = "loan_dashboard_light",
 ) -> go.Figure:
     """月供趋势折线图"""
     fig = go.Figure()
@@ -130,12 +201,13 @@ def create_monthly_payment_line(
             tickmode="auto",
             nticks=15,
             tickangle=45,
-        )
+        ),
+        template=template,
     )
     return fig
 
 
-def create_stacked_area(schedule: pd.DataFrame) -> go.Figure:
+def create_stacked_area(schedule: pd.DataFrame, template: str = "loan_dashboard_light") -> go.Figure:
     """本金/利息构成堆叠面积图"""
     fig = go.Figure()
     x_labels = _get_x_labels(schedule)
@@ -171,12 +243,13 @@ def create_stacked_area(schedule: pd.DataFrame) -> go.Figure:
             tickmode="auto",
             nticks=15,
             tickangle=45,
-        )
+        ),
+        template=template,
     )
     return fig
 
 
-def create_remaining_principal_line(schedule: pd.DataFrame, prepayment_periods: list = None) -> go.Figure:
+def create_remaining_principal_line(schedule: pd.DataFrame, prepayment_periods: list = None, template: str = "loan_dashboard_light") -> go.Figure:
     """剩余本金下降曲线"""
     fig = go.Figure()
     x_labels = _get_x_labels(schedule)
@@ -217,12 +290,13 @@ def create_remaining_principal_line(schedule: pd.DataFrame, prepayment_periods: 
             tickmode="auto",
             nticks=15,
             tickangle=45,
-        )
+        ),
+        template=template,
     )
     return fig
 
 
-def create_cumulative_chart(schedule: pd.DataFrame) -> go.Figure:
+def create_cumulative_chart(schedule: pd.DataFrame, template: str = "loan_dashboard_light") -> go.Figure:
     """累计本金/利息曲线"""
     fig = go.Figure()
     x_labels = _get_x_labels(schedule)
@@ -256,12 +330,13 @@ def create_cumulative_chart(schedule: pd.DataFrame) -> go.Figure:
             tickmode="auto",
             nticks=15,
             tickangle=45,
-        )
+        ),
+        template=template,
     )
     return fig
 
 
-def create_comparison_bar(comparison_df: pd.DataFrame) -> go.Figure:
+def create_comparison_bar(comparison_df: pd.DataFrame, template: str = "loan_dashboard_light") -> go.Figure:
     """方案对比柱状图"""
     fig = go.Figure()
 
@@ -285,6 +360,7 @@ def create_comparison_bar(comparison_df: pd.DataFrame) -> go.Figure:
         yaxis_title="金额(元)",
         margin=dict(t=60, b=40, l=60, r=20),
         height=400,
+        template=template,
     )
     return fig
 
@@ -294,6 +370,7 @@ def create_multi_schedule_line(
     y_col: str = "monthly_payment",
     title: str = "月供对比",
     y_label: str = "金额(元)",
+    template: str = "loan_dashboard_light",
 ) -> go.Figure:
     """多方案叠加折线图"""
     fig = go.Figure()
@@ -321,7 +398,8 @@ def create_multi_schedule_line(
             tickmode="auto",
             nticks=15,
             tickangle=45,
-        )
+        ),
+        template=template,
     )
     return fig
 
@@ -329,6 +407,7 @@ def create_multi_schedule_line(
 def create_multi_principal_interest_area(
     schedules: dict,
     title: str = "每期本金与利息对比",
+    template: str = "loan_dashboard_light",
 ) -> go.Figure:
     """多方案每期本金与利息对比（堆叠面积图）"""
     fig = go.Figure()
@@ -378,7 +457,8 @@ def create_multi_principal_interest_area(
             tickmode="auto",
             nticks=15,
             tickangle=45,
-        )
+        ),
+        template=template,
     )
     return fig
 
@@ -386,6 +466,7 @@ def create_multi_principal_interest_area(
 def create_separate_principal_interest_lines(
     schedules: dict,
     title: str = "本金与利息对比",
+    template: str = "loan_dashboard_light",
 ) -> go.Figure:
     """多方案分开显示本金和利息折线图"""
     fig = go.Figure()
@@ -426,6 +507,7 @@ def create_separate_principal_interest_lines(
             tickmode="auto",
             nticks=15,
             tickangle=45,
-        )
+        ),
+        template=template,
     )
     return fig

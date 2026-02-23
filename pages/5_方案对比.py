@@ -34,6 +34,10 @@ with tab_plans:
     if len(selected) < 2:
         st.warning("请至少选择2个方案进行对比。")
     else:
+        # 获取当前主题
+        theme_base = st.get_option("theme.base")
+        template = "loan_dashboard_dark" if theme_base == "dark" else "loan_dashboard_light"
+
         selected_plans = plans[plans["plan_name"].isin(selected)]
         plan_list = selected_plans.to_dict("records")
 
@@ -55,7 +59,7 @@ with tab_plans:
 
             col1, col2 = st.columns(2)
             with col1:
-                fig_bar = create_comparison_bar(comp_df)
+                fig_bar = create_comparison_bar(comp_df, template=template)
                 st.plotly_chart(fig_bar, width='stretch')
 
             with col2:
@@ -65,13 +69,13 @@ with tab_plans:
                         named_schedules[p["plan_name"]] = schedules[p["plan_id"]]
 
                 fig_line = create_multi_schedule_line(
-                    named_schedules, "monthly_payment", "月供对比", "金额(元)"
+                    named_schedules, "monthly_payment", "月供对比", "金额(元)", template=template
                 )
                 st.plotly_chart(fig_line, width='stretch')
 
             # 剩余本金对比
             fig_rem = create_multi_schedule_line(
-                named_schedules, "remaining_principal", "剩余本金对比", "剩余本金(元)"
+                named_schedules, "remaining_principal", "剩余本金对比", "剩余本金(元)", template=template
             )
             st.plotly_chart(fig_rem, width='stretch')
 
@@ -80,7 +84,7 @@ with tab_plans:
 
             # 本金和利息分开对比（折线图）
             fig_pi = create_separate_principal_interest_lines(
-                named_schedules, "各方案每期本金与利息对比"
+                named_schedules, "各方案每期本金与利息对比", template=template
             )
             st.plotly_chart(fig_pi, width='stretch')
 
@@ -117,6 +121,10 @@ with tab_methods:
         comp_years = st.number_input("贷款年限", value=30, min_value=1, max_value=30, key="comp_years")
 
     if st.button("开始对比", type="primary"):
+        # 获取当前主题
+        theme_base = st.get_option("theme.base")
+        template = "loan_dashboard_dark" if theme_base == "dark" else "loan_dashboard_light"
+
         result = compare_repayment_methods(
             comp_amount, comp_rate, comp_years * 12, date.today(),
         )
@@ -144,12 +152,12 @@ with tab_methods:
             "等额本息": result["equal_installment"]["schedule"],
             "等额本金": result["equal_principal"]["schedule"],
         }
-        fig = create_multi_schedule_line(named, "monthly_payment", "月供对比", "金额(元)")
+        fig = create_multi_schedule_line(named, "monthly_payment", "月供对比", "金额(元)", template=template)
         st.plotly_chart(fig, width='stretch')
 
         # 本金和利息对比图
-        fig_pi = create_separate_principal_interest_lines(named, "本金与利息对比")
+        fig_pi = create_separate_principal_interest_lines(named, "本金与利息对比", template=template)
         st.plotly_chart(fig_pi, width='stretch')
 
-        fig2 = create_multi_schedule_line(named, "remaining_principal", "剩余本金对比", "剩余本金(元)")
+        fig2 = create_multi_schedule_line(named, "remaining_principal", "剩余本金对比", "剩余本金(元)", template=template)
         st.plotly_chart(fig2, width='stretch')
