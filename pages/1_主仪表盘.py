@@ -194,10 +194,12 @@ def render_schedule_module(
         c3.metric("已还比例", fmt_percent(paid_ratio))
         c4.metric("剩余期数", fmt_months(remaining_periods))
 
-        c5, c6, c7 = st.columns(3)
+        c5, c6, c7, c8, c9 = st.columns(5)
         c5.metric("总利息", fmt_amount(total_interest))
         c6.metric("已还本金", fmt_amount(paid_principal))
         c7.metric("已还利息", fmt_amount(paid_interest))
+        c8.metric("剩余本金", fmt_amount(unpaid_principal))
+        c9.metric("剩余利息", fmt_amount(unpaid_interest))
 
         if prepayment_periods:
             st.info(f"💡 已记录 {len(prepayment_periods)} 次提前还款，发生在第 {', '.join([str(p) for p in prepayment_periods])} 期")

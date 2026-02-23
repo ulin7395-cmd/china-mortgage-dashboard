@@ -230,14 +230,16 @@ with tab_settings:
     st.subheader("当前配置一览")
     config_df = get_all_config()
 
-    if not config_df.empty:
-        display_df = config_df.copy()
-        display_df = display_df.rename(columns={
-            "key": "配置项",
-            "value": "当前值",
-            "description": "说明",
-            "updated_at": "更新时间"
-        })
-        st.dataframe(display_df, width='stretch', hide_index=True)
-    else:
-        st.info("暂无配置数据，使用系统默认值。")
+    if config_df.empty:
+        st.info("暂无配置数据，将使用并显示系统默认值。")
+        from data_manager.excel_handler import _default_config_rows
+        config_df = pd.DataFrame(_default_config_rows())
+
+    display_df = config_df.copy()
+    display_df = display_df.rename(columns={
+        "key": "配置项",
+        "value": "当前值",
+        "description": "说明",
+        "updated_at": "更新时间"
+    })
+    st.dataframe(display_df, width='stretch', hide_index=True)

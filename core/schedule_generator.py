@@ -110,16 +110,16 @@ def generate_plan_schedule_from_events(
     if loan_type == LoanType.COMBINED.value:
         commercial_principal = float(plan["commercial_amount"])
         provident_principal = float(plan["provident_amount"])
-        commercial_rate = float(plan["commercial_rate"])
-        provident_rate = float(plan["provident_rate"])
+        commercial_rate = round(float(plan["commercial_rate"]), 2)
+        provident_rate = round(float(plan["provident_rate"]), 2)
         principal = commercial_principal + provident_principal
         annual_rate = commercial_rate  # 组合贷默认用商贷利率
     elif loan_type == LoanType.PROVIDENT.value:
         principal = float(plan["provident_amount"])
-        annual_rate = float(plan["provident_rate"])
+        annual_rate = round(float(plan["provident_rate"]), 2)
     else:
         principal = float(plan["commercial_amount"])
-        annual_rate = float(plan["commercial_rate"])
+        annual_rate = round(float(plan["commercial_rate"]), 2)
 
     term_months = int(plan["term_months"])
 
